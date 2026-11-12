@@ -29,3 +29,17 @@ Elle est la source de vérité fonctionnelle.
 
 Lancer le skill personnel `/nouvelle-application`. Pour renommer l'entité
 partagée d'exemple : `docs/renommer-entite-partagee.md`.
+
+## Agent skills
+
+### Issue tracker
+
+Les tickets sont des GitHub Issues du dépôt `deteemma/mesuraTemporis` (CLI `gh`). Voir `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+Étiquettes par défaut : `needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-human`, `wontfix`. Voir `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+Single-context : glossaire dans `CONTEXT.md`, décisions dans `docs/adr/`. Voir `docs/agents/domain.md`.
