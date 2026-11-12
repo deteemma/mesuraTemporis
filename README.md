@@ -24,7 +24,13 @@ hérités par chaque application.
 
 ## Démarrer en local (PC, Docker Desktop)
 
-Prérequis : le [socle](../socle) démarré, Node 24 et pnpm.
+Prérequis : le [socle](../socle) démarré, Node 24, pnpm et Git for Windows.
+
+> **Sous Windows, lancer les scripts `.sh` depuis Git Bash.** Dans PowerShell,
+> la commande `bash` lance le Linux de WSL et non Git Bash ; les scripts du socle
+> échouent alors avec « openssl : commande introuvable ». Ouvrir un terminal
+> « Git Bash » (menu Démarrer ou liste des terminaux de VS Code), ou depuis
+> PowerShell : `& "C:\Program Files\Git\bin\bash.exe" scripts/<script>.sh`.
 
 ```bash
 # 1. Enregistrer l'application dans le socle (base, route, realm, .env)

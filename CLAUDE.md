@@ -20,7 +20,7 @@ Elle est la source de vérité fonctionnelle.
 | Installer | `pnpm install` |
 | Lint / types | `pnpm lint` · `pnpm --filter @app/shared build && pnpm typecheck` |
 | Démarrer (Docker, socle démarré) | `docker compose up -d --build` |
-| Tester les permissions | `bash scripts/tester-roles.sh` |
+| Tester les permissions | `bash scripts/tester-roles.sh` (sous Windows : Git Bash, pas le `bash` de PowerShell qui lance WSL) |
 | Web en rechargement à chaud | `pnpm dev:web` (http://localhost:5173) |
 | Mobile | `pnpm dev:mobile` (lire `mobile/AGENTS.md` avant de toucher au code Expo) |
 | Déployer | `./deployer.sh <application> <version>` |
