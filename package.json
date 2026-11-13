@@ -13,7 +13,8 @@
     "test": "pnpm -r test",
     "dev:web": "pnpm --filter web dev",
     "dev:mobile": "pnpm --filter mobile start",
-    "prototype:saisie-temps": "pnpm --filter web prototype"
+    "prototype:saisie-temps": "pnpm --filter web prototype",
+    "prototype:administration": "pnpm --filter web prototype:administration"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
