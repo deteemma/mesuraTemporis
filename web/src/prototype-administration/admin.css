@@ -120,7 +120,7 @@
 }
 .dialogue__actions {
   display: flex;
-  justify-content: flex-end;
+  justify-content: flex-start;
   gap: var(--space-2);
 }
 
@@ -158,4 +158,65 @@
   .proto-switcher {
     max-width: calc(100vw - 32px);
   }
+}
+
+/* --- Écart de design demandé à la revue : marges intérieures des cartes et des lignes --- */
+.card > .inline-form {
+  padding: var(--space-4) var(--space-5);
+}
+.card > .resource-list {
+  padding: 0 var(--space-5);
+}
+.resource-list__item {
+  padding: var(--space-4) 0;
+  gap: var(--space-4);
+}
+.resource-list__item > div:first-child {
+  gap: 2px;
+}
+.resource-list__nom {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+.resource-list__actions {
+  gap: var(--space-2);
+}
+.page > h1 {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+.page > .card + .card,
+.page > .card + .resource-list__vide {
+  margin-top: var(--space-5);
+}
+.projet__equipe .resource-list__item {
+  padding: var(--space-3) 0;
+}
+@media (max-width: 768px) {
+  .card > .inline-form {
+    padding: var(--space-3) var(--space-4);
+  }
+  .card > .resource-list {
+    padding: 0 var(--space-4);
+  }
+}
+.resource-list__item > div:first-child {
+  flex: 1 1 220px;
+  min-width: 200px;
+}
+.resource-list__item > .badge {
+  min-width: 110px;
+  justify-content: center;
+}
+.resource-list__item > .resource-list__actions {
+  margin-left: auto;
+}
+.ligne-utilisateur > .resource-list__actions {
+  flex-basis: 100%;
+  justify-content: flex-start;
+}
+.ligne-utilisateur > .resource-list__actions .field {
+  flex: 0 1 220px;
 }

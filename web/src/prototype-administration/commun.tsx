@@ -10,7 +10,7 @@ export type Variante = 'A' | 'B' | 'C';
 export const NOMS_VARIANTES: Record<Variante, string> = {
   A: 'Masquer + dialogue',
   B: 'Griser + expliquer + confirmer sur place',
-  C: 'Tout afficher, le serveur refuse, sans confirmation (= source)',
+  C: 'Retenue : tout afficher, le serveur refuse, dialogue de suppression',
 };
 
 export type Ecran = { nom: 'projets' } | { nom: 'activites'; projetId: string } | { nom: 'utilisateurs' };
@@ -120,7 +120,7 @@ export function FournisseurAdmin({ variante, aller, children }: { variante: Vari
 
 /**
  * Bouton « Supprimer » dont la confirmation dépend de la variante :
- * A = dialogue avec conséquences, B = confirmation sur place, C = aucune (source).
+ * A et C (retenue) = dialogue avec conséquences, B = confirmation sur place.
  */
 export function BoutonSupprimer({ message, onConfirme, desactive = false }: { message: string; onConfirme: () => void; desactive?: boolean }) {
   const { variante, t, demanderConfirmation } = useAdmin();
@@ -153,7 +153,7 @@ export function BoutonSupprimer({ message, onConfirme, desactive = false }: { me
       className="btn btn-danger"
       disabled={desactive}
       onClick={() => {
-        if (variante === 'A') demanderConfirmation({ titre: t('CONFIRMER_TITRE'), message, libelle: t('BOUTON_SUPPRIMER'), action: onConfirme });
+        if (variante === 'A' || variante === 'C') demanderConfirmation({ titre: t('CONFIRMER_TITRE'), message, libelle: t('BOUTON_SUPPRIMER'), action: onConfirme });
         else if (variante === 'B') setEnConfirmation(true);
         else onConfirme();
       }}

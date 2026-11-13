@@ -104,7 +104,7 @@ function Ligne({ u, idCourant, email, setEmail }: { u: Utilisateur; idCourant: s
     ) : null;
 
   return (
-    <li className="resource-list__item">
+    <li className="resource-list__item ligne-utilisateur">
       <div>
         <span className="resource-list__nom">
           {u.login} {variante === 'A' && repere}
