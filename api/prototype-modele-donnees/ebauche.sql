@@ -35,7 +35,7 @@ CREATE UNIQUE INDEX app_user_email_key ON app_user (lower(email));
 CREATE TABLE project (
   id         uuid PRIMARY KEY,
   name       text NOT NULL CHECK (btrim(name) <> ''),
-  status     text NOT NULL DEFAULT 'actif',   -- À TRANCHER : badge « actif » de la source
+  status     text NOT NULL DEFAULT 'actif',   -- badge « actif » repris à l'identique, jamais modifié
   created_at timestamptz NOT NULL DEFAULT now(),
   updated_at timestamptz NOT NULL DEFAULT now()
 );
@@ -62,8 +62,9 @@ CREATE TABLE activity (
   updated_at      timestamptz NOT NULL DEFAULT now(),
   UNIQUE (id, project_id)                   -- cible de la clé composite de time_entry
 );
--- Option « refus » (À TRANCHER) : unicité normalisée dans un Projet garantie par la base.
--- CREATE UNIQUE INDEX activity_project_name_key ON activity (project_id, normalized_name);
+-- Unicité normalisée dans un Projet garantie par la base (écart validé : la création par
+-- l'Administrateur refuse aussi le doublon, ACTIVITE_NOM_DUPLIQUE).
+CREATE UNIQUE INDEX activity_project_name_key ON activity (project_id, normalized_name);
 
 -- Imputation ----------------------------------------------------------------------
 CREATE TABLE time_entry (
