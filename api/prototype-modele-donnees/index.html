@@ -1,0 +1,632 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PROTOTYPE — Modèle de données et RLS</title>
+<style>
+  :root { --accent:#2563eb; --accent-pale:#eff6ff; --txt:#1f2937; --gris:#6b7280; --bord:#e5e7eb; --fond:#f9fafb; --ok:#047857; --ko:#b91c1c; --neuf:#fef9c3; }
+  * { box-sizing:border-box; }
+  body { margin:0; font:14px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; color:var(--txt); background:var(--fond); }
+  main { max-width:1200px; margin:0 auto; padding:24px 16px 64px; }
+  h1 { font-size:22px; margin:0 0 4px; } h2 { font-size:17px; margin:32px 0 10px; } h3 { font-size:14px; margin:16px 0 6px; color:var(--gris); text-transform:uppercase; letter-spacing:.04em; }
+  .bandeau { background:#fff7ed; border:1px solid #fed7aa; padding:6px 10px; border-radius:6px; font-size:12px; display:inline-block; margin-bottom:12px; }
+  .carte { background:#fff; border:1px solid var(--bord); border-radius:8px; padding:14px 16px; margin-bottom:12px; }
+  .intro p { margin:6px 0; }
+  .grille { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+  @media (max-width:900px){ .grille { grid-template-columns:1fr; } }
+  table { border-collapse:collapse; width:100%; font-size:13px; }
+  th, td { text-align:left; padding:4px 6px; border-bottom:1px solid var(--bord); vertical-align:top; }
+  th { color:var(--gris); font-weight:600; }
+  tr.neuf td { background:var(--neuf); }
+  .vide { color:var(--gris); font-style:italic; }
+  button { font:inherit; border:1px solid var(--accent); background:#fff; color:var(--accent); border-radius:6px; padding:4px 10px; cursor:pointer; }
+  button:hover:not(:disabled) { background:var(--accent-pale); }
+  button.plein { background:var(--accent); color:#fff; }
+  button:disabled { border-color:var(--bord); color:var(--gris); cursor:default; }
+  select, input { font:inherit; padding:3px 6px; border:1px solid var(--bord); border-radius:6px; max-width:100%; }
+  .ligne-action { display:flex; flex-wrap:wrap; gap:6px; align-items:center; padding:6px 0; border-bottom:1px dashed var(--bord); }
+  .ligne-action:last-child { border-bottom:0; }
+  .ligne-action .nom { min-width:190px; font-weight:600; }
+  .resultat { padding:10px 12px; border-radius:6px; margin-bottom:12px; border-left:4px solid var(--gris); background:#fff; }
+  .resultat.ok { border-color:var(--ok); } .resultat.ko { border-color:var(--ko); }
+  .resultat .code { font-family:ui-monospace, Consolas, monospace; font-size:12px; color:var(--ko); }
+  .badge { display:inline-block; font-size:11px; padding:0 6px; border-radius:9px; background:var(--accent-pale); color:var(--accent); }
+  .badge.gris { background:#f3f4f6; color:var(--gris); }
+  .onglets { display:flex; flex-wrap:wrap; gap:4px; margin-bottom:-1px; }
+  .onglets button { border-radius:6px 6px 0 0; border-color:var(--bord); color:var(--txt); }
+  .onglets button.actif { border-color:var(--accent); border-bottom-color:#fff; background:#fff; color:var(--accent); font-weight:600; }
+  .etapes { list-style:none; padding:0; margin:10px 0 0; }
+  .etapes li { margin:6px 0; display:flex; gap:8px; align-items:center; }
+  .etapes li.faite { color:var(--gris); }
+  .etapes li.faite button { text-decoration:line-through; }
+  .question { background:#fffbeb; border:1px solid #fde68a; }
+  code { font-family:ui-monospace, Consolas, monospace; font-size:12px; background:#f3f4f6; padding:0 4px; border-radius:4px; }
+  .acteur { display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+  .horloge { font-weight:600; }
+</style>
+</head>
+<body>
+<main>
+<div class="bandeau">PROTOTYPE jetable — branche <code>prototype/modele-donnees</code>, ne part jamais en production.</div>
+<h1>Modèle de données et droits d'accès (RLS) — ébauche à valider</h1>
+
+<div class="carte intro">
+  <p><strong>Question :</strong> le modèle de tables PostgreSQL et les politiques RLS ci-dessous reprennent-ils à l'identique les règles de <code>mesureTemporisMP</code>, avec les décisions déjà prises sur la carte (rôles, Journée Europe/Zurich, retrait d'un Projet, écrans d'administration) ?</p>
+  <p><strong>Comment lire :</strong> choisissez « qui agit », cliquez une action, regardez ce qui change. Le panneau de gauche montre <em>toute</em> la base (vue technique, sans filtre). Le panneau de droite montre <em>ce que la base laisse voir</em> à la personne qui agit. Chaque refus indique quelle barrière l'a produit : l'API (guard NestJS) ou la base (RLS / contrainte).</p>
+  <p>Les heures sont celles de Zurich. Le passage heure d'été/hiver n'est pas simulé.</p>
+</div>
+
+<h2>1. Points à trancher</h2>
+<div class="carte question">
+  <p><strong>Q1 — Création d'une Activité en doublon par l'Administrateur.</strong> Dans la source, le démarrage d'un chronomètre <em>réutilise</em> une Activité au nom équivalent (casse et accents ignorés), et le renommage <em>refuse</em> un doublon (<code>ACTIVITE_NOM_DUPLIQUE</code>). Mais la création par l'Administrateur depuis la gestion du Projet <em>accepte</em> le doublon sans rien dire (<code>POST /projets/:id/activites</code>, aucun contrôle). L'ébauche d'administration validée affichait déjà un refus. Testez les deux comportements :
+    <label><input type="radio" name="opt-doublon" value="identique"> à l'identique (doublon accepté)</label>
+    <label><input type="radio" name="opt-doublon" value="refus"> refus <code>ACTIVITE_NOM_DUPLIQUE</code> (écart ; unicité garantie par la base)</label>
+  </p>
+  <p><strong>Q2 — Statut du Projet.</strong> La source stocke un statut toujours égal à « actif », affiché en badge sur l'écran Projets et jamais modifiable. Faut-il reprendre ce badge à l'identique (colonne figée à « actif ») ou le supprimer (écart) ?</p>
+  <p><strong>Q3 — Imputation d'un autre Utilisateur.</strong> Si un Utilisateur non administrateur vise l'Imputation d'un autre (aucun écran ne le permet, seulement un appel direct), la source répond 403 <code>ACCES_REFUSE</code>. Avec la RLS, la ligne est invisible, donc la réponse proposée est 404 <code>IMPUTATION_INTROUVABLE</code>, comme pour un Projet (ADR-0006). D'accord ?</p>
+  <p><strong>Q4 — Comptages du dialogue de suppression.</strong> Proposition : l'API fournit une « lecture d'impact » (nombre d'Activités, d'Imputations de <em>tous</em> les Utilisateurs, de membres d'équipe). L'écran ne peut pas les compter lui-même, car il ne charge pas les Imputations des autres. Voir l'action « Lire l'impact ».</p>
+</div>
+
+<h2>2. Qui agit, et ce qui vient de se passer</h2>
+<div class="carte acteur">
+  <span>Qui agit :</span> <select id="acteur"></select>
+  <span class="horloge" id="horloge"></span>
+  <button data-libre="horloge" data-min="30">+30 min</button>
+  <button data-libre="horloge" data-min="240">+4 h</button>
+  <button data-libre="horloge" data-min="1440">+1 jour</button>
+  <button id="reinit">Remettre à zéro</button>
+</div>
+<div id="resultat" class="resultat">Aucune action pour l'instant.</div>
+
+<div class="grille">
+  <div class="carte"><h3 style="margin-top:0">Toute la base (vue technique)</h3><div id="base"></div></div>
+  <div class="carte"><h3 style="margin-top:0" id="titre-vue">Vu par …</h3><div id="vue"></div></div>
+</div>
+
+<h2>3. Scénarios guidés</h2>
+<div class="onglets" id="onglets"></div>
+<div class="carte" id="scenario"></div>
+
+<h2>4. Actions libres</h2>
+<div class="carte" id="actions"><p class="vide">Les listes proposent <em>tout</em>, y compris ce que la personne n'a pas le droit de viser, pour tester les refus.</p></div>
+
+<h2>5. Matrice « qui voit / qui modifie quoi »</h2>
+<div class="carte">
+<table>
+<tr><th>Donnée</th><th>Administrateur</th><th>Utilisateur affecté au Projet</th><th>Utilisateur non affecté</th></tr>
+<tr><td>Utilisateurs</td><td>voit, crée, modifie, supprime tous (sauf soi-même et le compte initial <code>admin</code>)</td><td colspan="2">ne voit que lui-même</td></tr>
+<tr><td>Projet</td><td>voit tous, crée, supprime (personne ne renomme)</td><td>voit</td><td>404 ; le <em>nom</em> reste lisible s'il y a des Imputations (pour les afficher), mais le Projet n'apparaît ni dans la recherche ni dans Mes projets</td></tr>
+<tr><td>Équipe (affectations)</td><td>voit tout, affecte, retire</td><td colspan="2">ne voit que ses propres affectations</td></tr>
+<tr><td>Activité</td><td>voit, crée, renomme, supprime</td><td>voit, crée (en démarrant un chronomètre), renomme</td><td>404 ; le <em>nom</em> reste lisible pour les Activités où il a des Imputations</td></tr>
+<tr><td>Imputation</td><td>voit, modifie, supprime toutes ; ne crée que les siennes, sur tout Projet</td><td>voit, crée, modifie, supprime les siennes ; jamais celles des autres</td><td>voit, modifie, supprime les siennes (même après retrait) ; n'en crée plus (404)</td></tr>
+</table>
+<h3>Contraintes garanties par la base</h3>
+<ul>
+  <li>Un seul chronomètre actif par Utilisateur (index unique partiel).</li>
+  <li>Fin ≥ début (contrainte de contrôle). La Scission et le refus <code>IMPUTATION_FIN_AVANT_DEBUT</code> sont décidés avant d'écrire.</li>
+  <li>L'Activité d'une Imputation appartient bien à son Projet (clé étrangère composite).</li>
+  <li>Auteur, Projet et Activité d'une Imputation ne changent jamais (Relancer en crée une nouvelle).</li>
+  <li>Cascades : supprimer un Utilisateur supprime ses Imputations et ses affectations ; supprimer un Projet supprime ses Activités, leurs Imputations et l'équipe ; supprimer une Activité supprime ses Imputations.</li>
+  <li>Une équipe ne contient que le rôle <code>contributor</code> ; <code>reader</code> et <code>owner</code> ne sont jamais attribués.</li>
+</ul>
+<p>Le brouillon SQL complet est dans <code>ebauche.sql</code>, à côté de ce fichier.</p>
+</div>
+</main>
+
+<script>
+/* ===================================================================
+   MODULE PUR — le modèle et ses règles. Aucun accès au DOM.
+   apply(etat, acteurId, action) => { etat, ok, texte, code, barriere, neufs }
+   =================================================================== */
+const Modele = (() => {
+  const JOUR = 86400000;
+  const iso = (ms) => new Date(ms).toISOString();
+  const jourDe = (ms) => iso(ms).slice(0, 10);
+  const a = (jour, hhmm) => Date.parse(`${jour}T${hhmm}:00.000Z`);
+  const jourSuivant = (jour) => jourDe(a(jour, '00:00') + JOUR);
+  const jourPrecedent = (jour) => jourDe(a(jour, '00:00') - JOUR);
+  const finDuJour = (jour) => a(jour, '23:59') + 59999;           // 23:59:59.999, comme la source
+
+  // Identique à normaliserTexte() de la source.
+  function normaliser(t) {
+    return t.normalize('NFD').split('').filter((c) => { const n = c.charCodeAt(0); return n < 0x300 || n > 0x36f; }).join('').trim().toLowerCase();
+  }
+
+  function etatInitial() {
+    const auj = '2026-11-13', hier = '2026-11-12';
+    return {
+      maintenant: a(auj, '09:00'),
+      optionDoublon: 'identique',
+      seq: 100,
+      utilisateurs: [
+        { id: 'u-admin', login: 'admin', nom: 'Compte initial', admin: true },
+        { id: 'u-alice', login: 'alice', nom: 'Alice', admin: false },
+        { id: 'u-bruno', login: 'bruno', nom: 'Bruno', admin: false },
+        { id: 'u-chloe', login: 'chloe', nom: 'Chloé', admin: true },
+      ],
+      projets: [
+        { id: 'P1', nom: 'Site web', statut: 'actif' },
+        { id: 'P2', nom: 'Migration', statut: 'actif' },
+      ],
+      equipes: [
+        { projetId: 'P1', utilisateurId: 'u-alice' },
+        { projetId: 'P1', utilisateurId: 'u-bruno' },
+        { projetId: 'P1', utilisateurId: 'u-chloe' },
+        { projetId: 'P2', utilisateurId: 'u-bruno' },
+      ],
+      activites: [
+        { id: 'A1', projetId: 'P1', nom: 'Maquettes' },
+        { id: 'A2', projetId: 'P1', nom: 'Intégration' },
+        { id: 'A3', projetId: 'P2', nom: 'Analyse' },
+      ],
+      imputations: [
+        { id: 'I1', utilisateurId: 'u-alice', projetId: 'P1', activiteId: 'A1', debut: a(hier, '09:00'), fin: a(hier, '11:30') },
+        { id: 'I2', utilisateurId: 'u-bruno', projetId: 'P2', activiteId: 'A3', debut: a(hier, '14:00'), fin: a(hier, '16:00') },
+        { id: 'I3', utilisateurId: 'u-bruno', projetId: 'P1', activiteId: 'A2', debut: a(auj, '08:00'), fin: a(auj, '08:45') },
+      ],
+    };
+  }
+
+  // ---- Contexte et politiques RLS (miroir de ebauche.sql) ----
+  const ctxDe = (s, uid) => ({ uid, admin: !!s.utilisateurs.find((u) => u.id === uid)?.admin });
+  const estMembre = (s, ctx, projetId) => s.equipes.some((e) => e.projetId === projetId && e.utilisateurId === ctx.uid);
+  const rls = {
+    utilisateur: (s, ctx, u) => ctx.admin || u.id === ctx.uid,
+    projet: (s, ctx, p) => ctx.admin || estMembre(s, ctx, p.id) || s.imputations.some((i) => i.projetId === p.id && i.utilisateurId === ctx.uid),
+    equipe: (s, ctx, e) => ctx.admin || e.utilisateurId === ctx.uid,
+    activite: (s, ctx, act) => ctx.admin || estMembre(s, ctx, act.projetId) || s.imputations.some((i) => i.activiteId === act.id && i.utilisateurId === ctx.uid),
+    imputation: (s, ctx, i) => ctx.admin || i.utilisateurId === ctx.uid,
+  };
+  // Raison de visibilité, pour l'affichage.
+  function raisonProjet(s, ctx, p) {
+    if (ctx.admin) return 'Administrateur';
+    if (estMembre(s, ctx, p.id)) return 'affecté';
+    return 'auteur d\'Imputations (non affecté)';
+  }
+  function vue(s, uid) {
+    const ctx = ctxDe(s, uid);
+    return {
+      ctx,
+      utilisateurs: s.utilisateurs.filter((u) => rls.utilisateur(s, ctx, u)),
+      projets: s.projets.filter((p) => rls.projet(s, ctx, p)).map((p) => ({ ...p, raison: raisonProjet(s, ctx, p) })),
+      equipes: s.equipes.filter((e) => rls.equipe(s, ctx, e)),
+      activites: s.activites.filter((x) => rls.activite(s, ctx, x)),
+      imputations: s.imputations.filter((i) => rls.imputation(s, ctx, i)),
+      // Recherche combinée (saisie unifiée) : filtrée par l'API sur l'affectation, pas sur la RLS seule.
+      recherche: s.activites.filter((x) => ctx.admin || estMembre(s, ctx, x.projetId)),
+    };
+  }
+
+  // ---- Lecture d'impact (dialogue de suppression chiffré) ----
+  function impact(s, type, id) {
+    if (type === 'projet') {
+      const acts = s.activites.filter((x) => x.projetId === id);
+      return { activites: acts.length, imputations: s.imputations.filter((i) => i.projetId === id).length, membres: s.equipes.filter((e) => e.projetId === id).length };
+    }
+    if (type === 'activite') return { imputations: s.imputations.filter((i) => i.activiteId === id).length };
+    if (type === 'utilisateur') return { compteDeConnexion: 1, imputations: s.imputations.filter((i) => i.utilisateurId === id).length, affectations: s.equipes.filter((e) => e.utilisateurId === id).length };
+    return {};
+  }
+
+  // ---- Réducteur ----
+  const ko = (barriere, code, texte) => ({ ok: false, barriere, code, texte });
+  function apply(etat, acteurId, action) {
+    const s = structuredClone(etat);
+    const ctx = ctxDe(s, acteurId);
+    const neufs = [];
+    const nouvelId = (p) => `${p}${++s.seq}`;
+    const fin = (r) => ({ etat: r.ok === false ? etat : s, neufs, ...r });
+    const exigerAdmin = () => (ctx.admin ? null : ko('API', 'ACCES_REFUSE', 'Réservé à l\'Administrateur.'));
+    const projetVisiblePourAgir = (pid) => {
+      const p = s.projets.find((x) => x.id === pid);
+      return p && (ctx.admin || estMembre(s, ctx, pid)) ? p : null;
+    };
+    const imputationVisible = (iid) => s.imputations.find((i) => i.id === iid && rls.imputation(s, ctx, i));
+    const chronoActif = (uid) => s.imputations.find((i) => i.utilisateurId === uid && i.fin === null);
+
+    function demarrer(projetId, activiteId) {
+      const precedent = chronoActif(ctx.uid);
+      if (precedent) { precedent.fin = s.maintenant; neufs.push(precedent.id); }
+      const i = { id: nouvelId('I'), utilisateurId: ctx.uid, projetId, activiteId, debut: s.maintenant, fin: null };
+      s.imputations.push(i); neufs.push(i.id);
+      return precedent ? ' Le chronomètre précédent a été arrêté automatiquement (même transaction).' : '';
+    }
+
+    switch (action.type) {
+      case 'horloge':
+        s.maintenant += action.min * 60000;
+        return fin({ ok: true, texte: `Horloge avancée de ${action.min} min.` });
+
+      case 'option':
+        s.optionDoublon = action.valeur;
+        return fin({ ok: true, texte: `Création d'Activité par l'Administrateur : ${action.valeur === 'refus' ? 'doublon refusé' : 'doublon accepté (à l\'identique)'}.` });
+
+      case 'creerUtilisateur': {
+        const r = exigerAdmin(); if (r) return fin(r);
+        const login = (action.login || '').trim();
+        if (!login) return fin(ko('API', 'LOGIN_REQUIS', 'Login requis.'));
+        if (s.utilisateurs.some((u) => u.login === login)) return fin(ko('API', 'LOGIN_EXISTANT', 'Ce login existe déjà.'));
+        const u = { id: `u-${login}`, login, nom: login, admin: false };
+        s.utilisateurs.push(u); neufs.push(u.id);
+        return fin({ ok: true, texte: `Compte Keycloak « ${login} » créé ; sa ligne Utilisateur est créée aussitôt en base, pour pouvoir l'affecter à une équipe avant sa première connexion.` });
+      }
+
+      case 'supprimerUtilisateur': {
+        const r = exigerAdmin(); if (r) return fin(r);
+        const u = s.utilisateurs.find((x) => x.id === action.utilisateurId);
+        if (!u) return fin(ko('API', 'UTILISATEUR_INTROUVABLE', 'Utilisateur introuvable.'));
+        if (u.id === ctx.uid) return fin(ko('API', 'UTILISATEUR_ACTION_SUR_SOI_INTERDITE', 'On ne peut pas se supprimer soi-même.'));
+        if (u.login === 'admin') return fin(ko('API', 'UTILISATEUR_COMPTE_INITIAL_PROTEGE', 'Le compte initial est protégé.'));
+        const imp = impact(s, 'utilisateur', u.id);
+        s.utilisateurs = s.utilisateurs.filter((x) => x.id !== u.id);
+        s.imputations = s.imputations.filter((i) => i.utilisateurId !== u.id);
+        s.equipes = s.equipes.filter((e) => e.utilisateurId !== u.id);
+        return fin({ ok: true, texte: `« ${u.login} » supprimé : compte Keycloak, ${imp.imputations} Imputation(s) et ${imp.affectations} affectation(s) supprimées en cascade.` });
+      }
+
+      case 'creerProjet': {
+        const r = exigerAdmin(); if (r) return fin(r);
+        const nom = (action.nom || '').trim();
+        if (!nom) return fin(ko('API', 'NOM_REQUIS', 'Nom requis.'));
+        const p = { id: nouvelId('P'), nom, statut: 'actif' };
+        s.projets.push(p); neufs.push(p.id);
+        return fin({ ok: true, texte: `Projet « ${nom} » créé, avec une équipe vide (pas de « créateur = propriétaire »).` });
+      }
+
+      case 'supprimerProjet': {
+        const r = exigerAdmin(); if (r) return fin(r);
+        const p = s.projets.find((x) => x.id === action.projetId);
+        if (!p) return fin(ko('API', 'PROJET_INTROUVABLE', 'Projet introuvable.'));
+        const imp = impact(s, 'projet', p.id);
+        s.projets = s.projets.filter((x) => x.id !== p.id);
+        s.activites = s.activites.filter((x) => x.projetId !== p.id);
+        s.imputations = s.imputations.filter((i) => i.projetId !== p.id);
+        s.equipes = s.equipes.filter((e) => e.projetId !== p.id);
+        return fin({ ok: true, texte: `Projet « ${p.nom} » supprimé : ${imp.activites} Activité(s), ${imp.imputations} Imputation(s) (tous Utilisateurs, chronomètres actifs compris) et ${imp.membres} affectation(s) en cascade.` });
+      }
+
+      case 'affecter': {
+        const r = exigerAdmin(); if (r) return fin(r);
+        if (!s.projets.some((p) => p.id === action.projetId)) return fin(ko('API', 'PROJET_INTROUVABLE', 'Projet introuvable.'));
+        if (!s.equipes.some((e) => e.projetId === action.projetId && e.utilisateurId === action.utilisateurId)) {
+          s.equipes.push({ projetId: action.projetId, utilisateurId: action.utilisateurId }); neufs.push(`${action.projetId}/${action.utilisateurId}`);
+        }
+        return fin({ ok: true, texte: 'Utilisateur affecté (rôle contributeur). Déjà affecté : rien ne change.' });
+      }
+
+      case 'retirer': {
+        const r = exigerAdmin(); if (r) return fin(r);
+        const u = s.utilisateurs.find((x) => x.id === action.utilisateurId);
+        s.equipes = s.equipes.filter((e) => !(e.projetId === action.projetId && e.utilisateurId === action.utilisateurId));
+        const c = u && chronoActif(u.id);
+        let suite = '';
+        if (c && c.projetId === action.projetId) {
+          if (u.admin) suite = ' Ce compte est Administrateur : son chronomètre continue.';
+          else { c.fin = s.maintenant; neufs.push(c.id); suite = ' Son chronomètre actif sur ce Projet est arrêté à l\'instant du retrait (même transaction).'; }
+        }
+        return fin({ ok: true, texte: `« ${u?.login} » retiré de l'équipe. Ses Imputations sont conservées.${suite}` });
+      }
+
+      case 'creerActivite': {
+        const r = exigerAdmin(); if (r) return fin(r);
+        const nom = (action.nom || '').trim();
+        if (!nom) return fin(ko('API', 'NOM_REQUIS', 'Nom requis.'));
+        const doublon = s.activites.find((x) => x.projetId === action.projetId && normaliser(x.nom) === normaliser(nom));
+        if (doublon && s.optionDoublon === 'refus') return fin(ko('Base (index unique)', 'ACTIVITE_NOM_DUPLIQUE', `« ${doublon.nom} » existe déjà dans ce Projet.`));
+        const act = { id: nouvelId('A'), projetId: action.projetId, nom };
+        s.activites.push(act); neufs.push(act.id);
+        return fin({ ok: true, texte: `Activité « ${nom} » créée.${doublon ? ` Attention : doublon de « ${doublon.nom} » (comportement de la source).` : ''}` });
+      }
+
+      case 'renommerActivite': {
+        const act = s.activites.find((x) => x.id === action.activiteId);
+        if (!act || !projetVisiblePourAgir(act.projetId)) return fin(ko('API', 'PROJET_INTROUVABLE', 'Projet introuvable (non affecté).'));
+        const nom = (action.nom || '').trim();
+        if (!nom) return fin(ko('API', 'NOM_REQUIS', 'Nom requis.'));
+        const doublon = s.activites.find((x) => x.id !== act.id && x.projetId === act.projetId && normaliser(x.nom) === normaliser(nom));
+        if (doublon) return fin(ko('API', 'ACTIVITE_NOM_DUPLIQUE', `« ${doublon.nom} » existe déjà dans ce Projet.`));
+        const ancien = act.nom; act.nom = nom; neufs.push(act.id);
+        return fin({ ok: true, texte: `« ${ancien} » renommée en « ${nom} » : toutes ses Imputations (de toute l'équipe) affichent le nouveau nom.` });
+      }
+
+      case 'supprimerActivite': {
+        const r = exigerAdmin(); if (r) return fin(r);
+        const act = s.activites.find((x) => x.id === action.activiteId);
+        if (!act) return fin(ko('API', 'ACTIVITE_INTROUVABLE', 'Activité introuvable.'));
+        const imp = impact(s, 'activite', act.id);
+        s.activites = s.activites.filter((x) => x.id !== act.id);
+        s.imputations = s.imputations.filter((i) => i.activiteId !== act.id);
+        return fin({ ok: true, texte: `Activité « ${act.nom} » supprimée avec ${imp.imputations} Imputation(s) en cascade.` });
+      }
+
+      case 'lireImpact': {
+        const r = exigerAdmin(); if (r) return fin(r);
+        const imp = impact(s, action.cible, action.id);
+        const libelles = { activites: 'Activité(s)', imputations: action.cible === 'utilisateur' ? 'Imputation(s)' : 'Imputation(s), tous Utilisateurs confondus', membres: 'membre(s) d\'équipe', compteDeConnexion: 'compte de connexion', affectations: 'affectation(s)' };
+        return { etat, neufs: [], ok: true, texte: 'Lecture d\'impact (rien n\'est modifié) : ' + Object.entries(imp).map(([k, v]) => `${v} ${libelles[k]}`).join(', ') + '.' };
+      }
+
+      case 'demarrer': {
+        const p = projetVisiblePourAgir(action.projetId);
+        if (!p) return fin(ko('API', 'PROJET_INTROUVABLE', 'Projet introuvable (non affecté).'));
+        let actId = action.activiteId, msgAct = '';
+        if (action.nouveauNom) {
+          const nom = action.nouveauNom.trim();
+          if (!nom) return fin(ko('API', 'NOM_REQUIS', 'Nom requis.'));
+          const existante = s.activites.find((x) => x.projetId === p.id && normaliser(x.nom) === normaliser(nom));
+          if (existante) { actId = existante.id; msgAct = ` « ${nom} » désigne l'Activité existante « ${existante.nom} » : elle est réutilisée.`; }
+          else { const act = { id: nouvelId('A'), projetId: p.id, nom }; s.activites.push(act); neufs.push(act.id); actId = act.id; msgAct = ` Activité « ${nom} » créée à la volée.`; }
+        } else if (!s.activites.some((x) => x.id === actId && x.projetId === p.id)) {
+          return fin(ko('API', 'ACTIVITE_INTROUVABLE', 'Activité introuvable pour ce Projet.'));
+        }
+        const suite = demarrer(p.id, actId);
+        return fin({ ok: true, texte: `Chronomètre démarré sur « ${p.nom} ».${msgAct}${suite}` });
+      }
+
+      case 'arreter': {
+        const c = chronoActif(ctx.uid);
+        if (!c) return fin(ko('API', 'AUCUN_CHRONO_ACTIF', 'Aucun chronomètre actif.'));
+        c.fin = s.maintenant; neufs.push(c.id);
+        return fin({ ok: true, texte: 'Chronomètre arrêté. Pas de Scission, même s\'il a franchi minuit : il reste rattaché à son jour de début.' });
+      }
+
+      case 'relancer': {
+        const i = imputationVisible(action.imputationId);
+        if (!i) return fin(ko('Base (RLS)', 'IMPUTATION_INTROUVABLE', 'Imputation introuvable.'));
+        if (!projetVisiblePourAgir(i.projetId)) return fin(ko('API', 'PROJET_INTROUVABLE', 'Projet introuvable : vous n\'êtes plus affecté à ce Projet.'));
+        const suite = demarrer(i.projetId, i.activiteId);
+        return fin({ ok: true, texte: `Nouveau chronomètre aujourd'hui, même Projet et même Activité ; l'Imputation d'origine n'est pas modifiée.${suite}` });
+      }
+
+      case 'saisieManuelle': {
+        const p = projetVisiblePourAgir(action.projetId);
+        if (!p) return fin(ko('API', 'PROJET_INTROUVABLE', 'Projet introuvable (non affecté).'));
+        if (!s.activites.some((x) => x.id === action.activiteId && x.projetId === p.id)) return fin(ko('API', 'ACTIVITE_INTROUVABLE', 'Activité introuvable pour ce Projet.'));
+        const debut = a(action.jourDebut, action.debut), finM = a(action.jourFin, action.fin);
+        if (finM < debut) return fin(ko('API', 'IMPUTATION_FIN_AVANT_DEBUT', 'L\'heure de fin ne peut pas être antérieure à l\'heure de début.'));
+        const i = { id: nouvelId('I'), utilisateurId: ctx.uid, projetId: p.id, activiteId: action.activiteId, debut, fin: finM };
+        s.imputations.push(i); neufs.push(i.id);
+        return fin({ ok: true, texte: `Plage ajoutée${jourDe(debut) !== jourDe(finM) ? ' ; elle franchit minuit, acceptée sans Scission, rattachée à son jour de début' : ''}.` });
+      }
+
+      case 'modifierFin': {
+        const i = imputationVisible(action.imputationId);
+        if (!i) return fin(ko('Base (RLS)', 'IMPUTATION_INTROUVABLE', 'Imputation introuvable.'));
+        if (i.fin === null) return fin(ko('Prototype', '—', 'Le prototype ne propose pas de modifier la fin d\'un chronomètre actif.'));
+        const jour = jourDe(i.debut), voulue = a(jour, action.heure);
+        if (voulue >= i.debut) { i.fin = voulue; neufs.push(i.id); return fin({ ok: true, texte: 'Heure de fin modifiée.' }); }
+        // Scission vers le lendemain.
+        const lendemain = jourSuivant(jour);
+        i.fin = finDuJour(jour); neufs.push(i.id);
+        const n = { id: nouvelId('I'), utilisateurId: i.utilisateurId, projetId: i.projetId, activiteId: i.activiteId, debut: a(lendemain, '00:00'), fin: a(lendemain, action.heure) };
+        s.imputations.push(n); neufs.push(n.id);
+        return fin({ ok: true, texte: `Scission : la fin ${action.heure} est avant le début, donc elle est comprise comme le lendemain. L'Imputation est tronquée à 23:59:59 et une nouvelle est créée le ${lendemain} de 00:00 à ${action.heure}. Les deux écritures sont faites dans une seule transaction.` });
+      }
+
+      case 'modifierDebut': {
+        const i = imputationVisible(action.imputationId);
+        if (!i) return fin(ko('Base (RLS)', 'IMPUTATION_INTROUVABLE', 'Imputation introuvable.'));
+        const jour = jourDe(i.debut), voulu = a(jour, action.heure);
+        if (i.fin === null || voulu <= i.fin) { i.debut = voulu; neufs.push(i.id); return fin({ ok: true, texte: 'Heure de début modifiée.' }); }
+        // Scission vers la veille.
+        const jourFin = jourDe(i.fin), veille = jourPrecedent(jourFin);
+        i.debut = a(jourFin, '00:00'); neufs.push(i.id);
+        const n = { id: nouvelId('I'), utilisateurId: i.utilisateurId, projetId: i.projetId, activiteId: i.activiteId, debut: a(veille, action.heure), fin: finDuJour(veille) };
+        s.imputations.push(n); neufs.push(n.id);
+        return fin({ ok: true, texte: `Scission : le début ${action.heure} est après la fin, donc il est compris comme la veille. L'Imputation commence désormais à 00:00 et une nouvelle est créée le ${veille} de ${action.heure} à 23:59:59 (une seule transaction).` });
+      }
+
+      case 'supprimerImputation': {
+        const i = imputationVisible(action.imputationId);
+        if (!i) return fin(ko('Base (RLS)', 'IMPUTATION_INTROUVABLE', 'Imputation introuvable.'));
+        s.imputations = s.imputations.filter((x) => x.id !== i.id);
+        return fin({ ok: true, texte: 'Imputation supprimée.' });
+      }
+    }
+    return fin(ko('Prototype', '—', 'Action inconnue.'));
+  }
+
+  return { etatInitial, apply, vue, jourDe };
+})();
+
+/* ===================================================================
+   PAGE — coquille jetable au-dessus du module.
+   =================================================================== */
+let etat = Modele.etatInitial();
+let acteur = 'u-alice';
+let neufs = [];
+const $ = (id) => document.getElementById(id);
+const esc = (t) => String(t).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+const nomU = (id) => etat.utilisateurs.find((u) => u.id === id)?.login ?? `(supprimé ${id})`;
+const nomP = (id) => etat.projets.find((p) => p.id === id)?.nom ?? '?';
+const nomA = (id) => etat.activites.find((x) => x.id === id)?.nom ?? '?';
+const date = (ms) => { const d = new Date(ms).toISOString(); return `${d.slice(8, 10)}.${d.slice(5, 7)} ${d.slice(11, 16)}`; };
+const duree = (i) => { if (i.fin === null) return 'en cours'; const m = Math.round((i.fin - i.debut) / 60000); return `${Math.floor(m / 60)} h ${String(m % 60).padStart(2, '0')}`; };
+const ligneImp = (i) => `${esc(nomP(i.projetId))} / ${esc(nomA(i.activiteId))} · ${date(i.debut)} → ${i.fin === null ? '<span class="badge">chronomètre actif</span>' : date(i.fin)} · ${duree(i)}`;
+
+function tableau(entetes, lignes) {
+  if (!lignes.length) return '<p class="vide">aucune ligne</p>';
+  return `<table><tr>${entetes.map((h) => `<th>${h}</th>`).join('')}</tr>${lignes.map(([cle, cells]) => `<tr class="${neufs.includes(cle) ? 'neuf' : ''}">${cells.map((c) => `<td>${c}</td>`).join('')}</tr>`).join('')}</table>`;
+}
+
+function rendreBase(s) {
+  return '<h3>Utilisateurs</h3>' + tableau(['login', 'rôle Keycloak'], s.utilisateurs.map((u) => [u.id, [esc(u.login), u.admin ? '<span class="badge">administrateur</span>' : '<span class="badge gris">utilisateur</span>']]))
+    + '<h3>Projets</h3>' + tableau(['nom', 'statut', 'équipe'], s.projets.map((p) => [p.id, [esc(p.nom), p.statut, s.equipes.filter((e) => e.projetId === p.id).map((e) => esc(nomU(e.utilisateurId))).join(', ') || '<span class="vide">vide</span>']]))
+    + '<h3>Activités</h3>' + tableau(['Projet', 'nom'], s.activites.map((x) => [x.id, [esc(nomP(x.projetId)), esc(x.nom)]]))
+    + '<h3>Imputations</h3>' + tableau(['auteur', 'Imputation'], [...s.imputations].sort((x, y) => y.debut - x.debut).map((i) => [i.id, [esc(nomU(i.utilisateurId)), ligneImp(i)]]));
+}
+
+function rendreVue(s, uid) {
+  const v = Modele.vue(s, uid);
+  return '<h3>Projets visibles</h3>' + tableau(['nom', 'pourquoi'], v.projets.map((p) => [p.id, [esc(p.nom), p.raison]]))
+    + '<h3>Recherche « Activité — Projet » (saisie unifiée)</h3>' + tableau(['propositions'], v.recherche.map((x) => [x.id, [`${esc(x.nom)} — ${esc(nomP(x.projetId))}`]]))
+    + '<h3>Activités lisibles</h3>' + tableau(['Projet', 'nom'], v.activites.map((x) => [x.id, [esc(nomP(x.projetId)), esc(x.nom)]]))
+    + '<h3>Affectations visibles</h3>' + tableau(['Projet', 'Utilisateur'], v.equipes.map((e) => [`${e.projetId}/${e.utilisateurId}`, [esc(nomP(e.projetId)), esc(nomU(e.utilisateurId))]]))
+    + '<h3>Utilisateurs visibles</h3>' + tableau(['login'], v.utilisateurs.map((u) => [u.id, [esc(u.login)]]))
+    + '<h3>Imputations visibles</h3>' + tableau(['auteur', 'Imputation'], [...v.imputations].sort((x, y) => y.debut - x.debut).map((i) => [i.id, [esc(nomU(i.utilisateurId)), ligneImp(i)]]));
+}
+
+function dispatcher(action, qui = acteur) {
+  const r = Modele.apply(etat, qui, action);
+  etat = r.etat; neufs = r.neufs;
+  const el = $('resultat');
+  el.className = 'resultat ' + (r.ok ? 'ok' : 'ko');
+  el.innerHTML = `<strong>${esc(nomU(qui))}</strong> : ${esc(r.texte)}` + (r.ok ? '' : `<br><span class="code">Refusé par : ${esc(r.barriere)} · code ${esc(r.code)}</span>`);
+  rendre();
+}
+
+/* ---- Actions libres ---- */
+const opts = (liste, val, lib) => liste.map((x) => `<option value="${esc(val(x))}">${esc(lib(x))}</option>`).join('');
+function rendreActions() {
+  const s = etat;
+  const U = opts(s.utilisateurs, (u) => u.id, (u) => u.login);
+  const P = opts(s.projets, (p) => p.id, (p) => p.nom);
+  const A = opts(s.activites, (x) => x.id, (x) => `${x.nom} — ${nomP(x.projetId)}`);
+  const I = opts([...s.imputations].sort((x, y) => y.debut - x.debut), (i) => i.id, (i) => `${nomU(i.utilisateurId)} · ${nomA(i.activiteId)} · ${date(i.debut)}${i.fin === null ? ' (actif)' : ''}`);
+  const jour = Modele.jourDe(s.maintenant);
+  $('actions').innerHTML = `
+  <p class="vide">Les listes proposent <em>tout</em>, y compris ce que la personne n'a pas le droit de viser, pour tester les refus.</p>
+  <h3>Saisie de temps</h3>
+  <div class="ligne-action"><span class="nom">Démarrer (Activité existante)</span><select id="f-dem-a">${A}</select><button data-f="demA">Démarrer</button></div>
+  <div class="ligne-action"><span class="nom">Démarrer (nouvelle Activité)</span><select id="f-dem-p">${P}</select><input id="f-dem-n" placeholder="nom tapé" value="maquettes"><button data-f="demN">Démarrer</button></div>
+  <div class="ligne-action"><span class="nom">Arrêter le chronomètre</span><button data-f="arr">Arrêter</button></div>
+  <div class="ligne-action"><span class="nom">Relancer</span><select id="f-rel">${I}</select><button data-f="rel">Relancer</button></div>
+  <div class="ligne-action"><span class="nom">Ajouter une plage</span><select id="f-man-a">${A}</select><input id="f-man-jd" type="date" value="${jour}"><input id="f-man-d" type="time" value="13:00"> → <input id="f-man-jf" type="date" value="${jour}"><input id="f-man-f" type="time" value="14:00"><button data-f="man">Ajouter</button></div>
+  <div class="ligne-action"><span class="nom">Modifier l'heure de fin</span><select id="f-fin-i">${I}</select><input id="f-fin-h" type="time" value="01:15"><button data-f="fin">Modifier</button></div>
+  <div class="ligne-action"><span class="nom">Modifier l'heure de début</span><select id="f-deb-i">${I}</select><input id="f-deb-h" type="time" value="22:00"><button data-f="deb">Modifier</button></div>
+  <div class="ligne-action"><span class="nom">Supprimer une Imputation</span><select id="f-sup-i">${I}</select><button data-f="supI">Supprimer</button></div>
+  <div class="ligne-action"><span class="nom">Renommer une Activité</span><select id="f-ren-a">${A}</select><input id="f-ren-n" value="Maquettes V2"><button data-f="ren">Renommer</button></div>
+  <h3>Administration</h3>
+  <div class="ligne-action"><span class="nom">Créer un Utilisateur</span><input id="f-cu" value="dora"><button data-f="cu">Créer</button></div>
+  <div class="ligne-action"><span class="nom">Supprimer un Utilisateur</span><select id="f-su">${U}</select><button data-f="impU">Lire l'impact</button><button data-f="su">Supprimer</button></div>
+  <div class="ligne-action"><span class="nom">Créer un Projet</span><input id="f-cp" value="Formation"><button data-f="cp">Créer</button></div>
+  <div class="ligne-action"><span class="nom">Supprimer un Projet</span><select id="f-sp">${P}</select><button data-f="impP">Lire l'impact</button><button data-f="sp">Supprimer</button></div>
+  <div class="ligne-action"><span class="nom">Équipe</span><select id="f-eq-p">${P}</select><select id="f-eq-u">${U}</select><button data-f="aff">Affecter</button><button data-f="ret">Retirer</button></div>
+  <div class="ligne-action"><span class="nom">Créer une Activité</span><select id="f-ca-p">${P}</select><input id="f-ca-n" value="Maquettes "><button data-f="ca">Créer</button></div>
+  <div class="ligne-action"><span class="nom">Supprimer une Activité</span><select id="f-sa">${A}</select><button data-f="impA">Lire l'impact</button><button data-f="sa">Supprimer</button></div>`;
+}
+const v = (id) => $(id).value;
+const actionsLibres = {
+  demA: () => { const x = etat.activites.find((y) => y.id === v('f-dem-a')); return { type: 'demarrer', projetId: x?.projetId, activiteId: x?.id }; },
+  demN: () => ({ type: 'demarrer', projetId: v('f-dem-p'), nouveauNom: v('f-dem-n') }),
+  arr: () => ({ type: 'arreter' }),
+  rel: () => ({ type: 'relancer', imputationId: v('f-rel') }),
+  man: () => { const x = etat.activites.find((y) => y.id === v('f-man-a')); return { type: 'saisieManuelle', projetId: x?.projetId, activiteId: x?.id, jourDebut: v('f-man-jd'), debut: v('f-man-d'), jourFin: v('f-man-jf'), fin: v('f-man-f') }; },
+  fin: () => ({ type: 'modifierFin', imputationId: v('f-fin-i'), heure: v('f-fin-h') }),
+  deb: () => ({ type: 'modifierDebut', imputationId: v('f-deb-i'), heure: v('f-deb-h') }),
+  supI: () => ({ type: 'supprimerImputation', imputationId: v('f-sup-i') }),
+  ren: () => ({ type: 'renommerActivite', activiteId: v('f-ren-a'), nom: v('f-ren-n') }),
+  cu: () => ({ type: 'creerUtilisateur', login: v('f-cu') }),
+  impU: () => ({ type: 'lireImpact', cible: 'utilisateur', id: v('f-su') }),
+  su: () => ({ type: 'supprimerUtilisateur', utilisateurId: v('f-su') }),
+  cp: () => ({ type: 'creerProjet', nom: v('f-cp') }),
+  impP: () => ({ type: 'lireImpact', cible: 'projet', id: v('f-sp') }),
+  sp: () => ({ type: 'supprimerProjet', projetId: v('f-sp') }),
+  aff: () => ({ type: 'affecter', projetId: v('f-eq-p'), utilisateurId: v('f-eq-u') }),
+  ret: () => ({ type: 'retirer', projetId: v('f-eq-p'), utilisateurId: v('f-eq-u') }),
+  ca: () => ({ type: 'creerActivite', projetId: v('f-ca-p'), nom: v('f-ca-n') }),
+  impA: () => ({ type: 'lireImpact', cible: 'activite', id: v('f-sa') }),
+  sa: () => ({ type: 'supprimerActivite', activiteId: v('f-sa') }),
+};
+
+/* ---- Scénarios guidés ---- */
+const S = (qui, libelle, action) => ({ qui, libelle, action });
+const scenarios = [
+  { titre: 'Chemin nominal', texte: 'Alice démarre un chronomètre en tapant « maquettes » (sans majuscule) sur le Projet Site web, travaille, arrête, puis ajoute une plage à la main. À observer : l\'Activité existante « Maquettes » est réutilisée, pas dupliquée ; Alice ne voit jamais les Imputations de Bruno.', etapes: [
+    S('u-alice', 'Alice démarre « maquettes » sur Site web', { type: 'demarrer', projetId: 'P1', nouveauNom: 'maquettes' }),
+    S('u-alice', 'Une heure et demie passe', { type: 'horloge', min: 90 }),
+    S('u-alice', 'Alice arrête le chronomètre', { type: 'arreter' }),
+    S('u-alice', 'Alice ajoute 13:00 → 14:15 sur Intégration', { type: 'saisieManuelle', projetId: 'P1', activiteId: 'A2', jourDebut: '2026-11-13', debut: '13:00', jourFin: '2026-11-13', fin: '14:15' }),
+  ] },
+  { titre: 'Un seul chronomètre', texte: 'Bruno démarre un chronomètre sur Analyse, puis en démarre un second sur Intégration sans arrêter le premier. À observer : le premier est arrêté automatiquement, dans la même transaction ; la base n\'en accepterait jamais deux actifs.', etapes: [
+    S('u-bruno', 'Bruno démarre Analyse (Migration)', { type: 'demarrer', projetId: 'P2', activiteId: 'A3' }),
+    S('u-bruno', '20 minutes passent', { type: 'horloge', min: 20 }),
+    S('u-bruno', 'Bruno démarre Intégration (Site web)', { type: 'demarrer', projetId: 'P1', activiteId: 'A2' }),
+    S('u-bruno', 'Bruno arrête', { type: 'arreter' }),
+    S('u-bruno', 'Bruno clique encore « Arrêter »', { type: 'arreter' }),
+  ] },
+  { titre: 'Scission', texte: 'Alice saisit une soirée 22:00 → 23:30, puis corrige la fin à 01:15. À observer : deux Imputations, l\'une jusqu\'à 23:59:59 et l\'autre le lendemain à partir de 00:00 (journée de Zurich). Elle tente ensuite une plage dont la fin précède le début : refus.', etapes: [
+    S('u-alice', 'Alice ajoute 22:00 → 23:30 aujourd\'hui', { type: 'saisieManuelle', projetId: 'P1', activiteId: 'A1', jourDebut: '2026-11-13', debut: '22:00', jourFin: '2026-11-13', fin: '23:30' }),
+    S('u-alice', 'Alice change la fin en 01:15', { type: 'modifierFin', imputationId: 'I101', heure: '01:15' }),
+    S('u-alice', 'Alice change le début d\'hier (09:00) en 12:00, après la fin 11:30', { type: 'modifierDebut', imputationId: 'I1', heure: '12:00' }),
+    S('u-alice', 'Alice ajoute 15:00 → 14:00 : fin avant début', { type: 'saisieManuelle', projetId: 'P1', activiteId: 'A1', jourDebut: '2026-11-13', debut: '15:00', jourFin: '2026-11-13', fin: '14:00' }),
+  ] },
+  { titre: 'Retrait d\'une équipe', texte: 'Alice a un chronomètre actif sur Site web quand l\'Administrateur la retire de l\'équipe. À observer : son chronomètre s\'arrête ; elle voit toujours ses Imputations et le nom du Projet, mais Site web disparaît de sa recherche ; Relancer et renommer répondent 404. Chloé, Administratrice, retirée de la même équipe, garde son chronomètre.', etapes: [
+    S('u-alice', 'Alice démarre Maquettes', { type: 'demarrer', projetId: 'P1', activiteId: 'A1' }),
+    S('u-chloe', 'Chloé (Administratrice) démarre Intégration', { type: 'demarrer', projetId: 'P1', activiteId: 'A2' }),
+    S('u-alice', '45 minutes passent', { type: 'horloge', min: 45 }),
+    S('u-admin', 'admin retire Alice de Site web', { type: 'retirer', projetId: 'P1', utilisateurId: 'u-alice' }),
+    S('u-admin', 'admin retire Chloé de Site web', { type: 'retirer', projetId: 'P1', utilisateurId: 'u-chloe' }),
+    S('u-alice', 'Alice clique « Arrêter » (écran pas encore rechargé)', { type: 'arreter' }),
+    S('u-alice', 'Alice relance son Imputation d\'hier', { type: 'relancer', imputationId: 'I1' }),
+    S('u-alice', 'Alice renomme Maquettes', { type: 'renommerActivite', activiteId: 'A1', nom: 'Wireframes' }),
+    S('u-alice', 'Alice corrige quand même son Imputation d\'hier (fin 12:00)', { type: 'modifierFin', imputationId: 'I1', heure: '12:00' }),
+  ] },
+  { titre: 'Noms d\'Activité', texte: 'Unicité « normalisée » : casse, accents et espaces de bord ignorés, dans un même Projet. À observer : le renommage refuse un doublon mais accepte un simple changement de casse de soi-même ; la création par l\'Administrateur dépend de la réponse à Q1 (bascule en haut de page). Le même nom reste permis dans un autre Projet.', etapes: [
+    S('u-bruno', 'Bruno renomme Intégration en « MAQUÊTTES »', { type: 'renommerActivite', activiteId: 'A2', nom: 'MAQUÊTTES' }),
+    S('u-bruno', 'Bruno renomme Maquettes en « maquettes »', { type: 'renommerActivite', activiteId: 'A1', nom: 'maquettes' }),
+    S('u-admin', 'admin crée « Maquettes  » dans Site web', { type: 'creerActivite', projetId: 'P1', nom: 'Maquettes ' }),
+    S('u-admin', 'admin crée « Maquettes » dans Migration', { type: 'creerActivite', projetId: 'P2', nom: 'Maquettes' }),
+  ] },
+  { titre: 'Suppressions chiffrées', texte: 'L\'Administrateur lit l\'impact avant chaque suppression, comme dans le dialogue validé. À observer : les comptages incluent les Imputations de tous les Utilisateurs ; la cascade emporte aussi un chronomètre actif ; supprimer un Utilisateur supprime son compte Keycloak et ses Imputations.', etapes: [
+    S('u-bruno', 'Bruno démarre Analyse (Migration)', { type: 'demarrer', projetId: 'P2', activiteId: 'A3' }),
+    S('u-admin', 'admin lit l\'impact de supprimer Migration', { type: 'lireImpact', cible: 'projet', id: 'P2' }),
+    S('u-admin', 'admin supprime Migration', { type: 'supprimerProjet', projetId: 'P2' }),
+    S('u-admin', 'admin lit l\'impact de supprimer bruno', { type: 'lireImpact', cible: 'utilisateur', id: 'u-bruno' }),
+    S('u-admin', 'admin supprime bruno', { type: 'supprimerUtilisateur', utilisateurId: 'u-bruno' }),
+  ] },
+  { titre: 'Ce qui est interdit', texte: 'Tentatives qui doivent échouer, avec la barrière qui les arrête.', etapes: [
+    S('u-bruno', 'Bruno supprime l\'Imputation d\'Alice', { type: 'supprimerImputation', imputationId: 'I1' }),
+    S('u-alice', 'Alice démarre sur Migration (non affectée)', { type: 'demarrer', projetId: 'P2', activiteId: 'A3' }),
+    S('u-alice', 'Alice crée un Projet', { type: 'creerProjet', nom: 'Perso' }),
+    S('u-alice', 'Alice supprime une Activité', { type: 'supprimerActivite', activiteId: 'A1' }),
+    S('u-chloe', 'Chloé se supprime elle-même', { type: 'supprimerUtilisateur', utilisateurId: 'u-chloe' }),
+    S('u-chloe', 'Chloé supprime le compte initial admin', { type: 'supprimerUtilisateur', utilisateurId: 'u-admin' }),
+  ] },
+];
+let ongletActif = 0, etapeCourante = 0;
+function demarrerScenario(n) {
+  ongletActif = n; etapeCourante = 0;
+  const opt = etat.optionDoublon;
+  etat = Modele.etatInitial(); etat.optionDoublon = opt; neufs = [];
+  $('resultat').className = 'resultat'; $('resultat').textContent = `Scénario « ${scenarios[n].titre} » : état de départ rétabli.`;
+  rendre();
+}
+function rendreScenario() {
+  $('onglets').innerHTML = scenarios.map((sc, n) => `<button class="${n === ongletActif ? 'actif' : ''}" data-onglet="${n}">${esc(sc.titre)}</button>`).join('');
+  const sc = scenarios[ongletActif];
+  $('scenario').innerHTML = `<p>${esc(sc.texte)}</p><button data-recommencer>Recommencer ce scénario</button><ol class="etapes">${sc.etapes.map((e, n) =>
+    `<li class="${n < etapeCourante ? 'faite' : ''}">${n + 1}. <button ${n === etapeCourante ? 'class="plein"' : ''} ${n !== etapeCourante ? 'disabled' : ''} data-etape="${n}">${esc(e.libelle)}</button></li>`).join('')}</ol>`;
+}
+
+function rendre() {
+  $('acteur').innerHTML = opts(etat.utilisateurs, (u) => u.id, (u) => `${u.login}${u.admin ? ' (Administrateur)' : ''}`);
+  if (!etat.utilisateurs.some((u) => u.id === acteur)) acteur = etat.utilisateurs[0].id;
+  $('acteur').value = acteur;
+  $('horloge').textContent = `Maintenant : ${date(etat.maintenant)} (${Modele.jourDe(etat.maintenant)})`;
+  $('base').innerHTML = rendreBase(etat);
+  $('titre-vue').textContent = `Vu par ${nomU(acteur)} (RLS)`;
+  $('vue').innerHTML = rendreVue(etat, acteur);
+  document.querySelectorAll('input[name=opt-doublon]').forEach((r) => { r.checked = r.value === etat.optionDoublon; });
+  rendreActions(); rendreScenario();
+}
+
+document.addEventListener('click', (ev) => {
+  const b = ev.target.closest('button'); if (!b) return;
+  if (b.dataset.f) dispatcher(actionsLibres[b.dataset.f]());
+  else if (b.dataset.libre === 'horloge') dispatcher({ type: 'horloge', min: Number(b.dataset.min) });
+  else if (b.id === 'reinit') { demarrerScenario(ongletActif); }
+  else if (b.dataset.onglet !== undefined) demarrerScenario(Number(b.dataset.onglet));
+  else if (b.dataset.recommencer !== undefined) demarrerScenario(ongletActif);
+  else if (b.dataset.etape !== undefined) {
+    const e = scenarios[ongletActif].etapes[Number(b.dataset.etape)];
+    acteur = e.qui; etapeCourante++; dispatcher(e.action, e.qui);
+  }
+});
+$('acteur').addEventListener('change', (ev) => { acteur = ev.target.value; neufs = []; rendre(); });
+document.addEventListener('change', (ev) => { if (ev.target.name === 'opt-doublon') dispatcher({ type: 'option', valeur: ev.target.value }); });
+rendre();
+</script>
+</body>
+</html>
