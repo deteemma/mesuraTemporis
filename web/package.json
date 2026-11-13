@@ -7,7 +7,8 @@
     "dev": "vite",
     "build": "tsc -p tsconfig.json --noEmit && vite build",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "prototype": "vite --open /?prototype=saisie-temps"
   },
   "dependencies": {
     "@app/shared": "workspace:*",

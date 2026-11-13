@@ -12,7 +12,8 @@
     "typecheck": "pnpm -r typecheck",
     "test": "pnpm -r test",
     "dev:web": "pnpm --filter web dev",
-    "dev:mobile": "pnpm --filter mobile start"
+    "dev:mobile": "pnpm --filter mobile start",
+    "prototype:saisie-temps": "pnpm --filter web prototype"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
