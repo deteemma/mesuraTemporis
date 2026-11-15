@@ -35,3 +35,34 @@ export interface ErrorBody {
 export function isErrorCode(value: unknown): value is ErrorCode {
   return typeof value === 'string' && (ERROR_CODES as readonly string[]).includes(value);
 }
+
+/**
+ * Message français de chaque code : repli renvoyé par l'API dans `message`
+ * (textes de la source) et traduction française du web. L'indexation par
+ * ErrorCode garantit, à la vérification des types, qu'aucun code n'est oublié.
+ */
+export const ERROR_MESSAGES_FR: Record<ErrorCode, string> = {
+  ERREUR_INTERNE: 'Erreur interne du serveur',
+  IMPUTATION_INTROUVABLE: 'Imputation introuvable',
+  AUCUN_CHRONO_ACTIF: 'Aucun chronomètre actif',
+  IMPUTATION_CHAMPS_REQUIS: 'projetId, activiteId, heureDebut et heureFin sont requis',
+  IMPUTATION_FIN_AVANT_DEBUT: "L'heure de fin ne peut pas être antérieure à l'heure de début",
+  PLAGE_DATES_REQUISE: 'dateDebut et dateFin sont requis',
+  ACCES_REFUSE: 'Accès refusé',
+  PROJET_INTROUVABLE: 'Projet introuvable',
+  ACTIVITE_INTROUVABLE: 'Activité introuvable',
+  ACTIVITE_NOM_DUPLIQUE: 'Une Activité de ce nom existe déjà dans ce Projet',
+  UTILISATEUR_INTROUVABLE: 'Utilisateur introuvable',
+  NOM_REQUIS: 'Nom requis',
+  LOGIN_REQUIS: 'Login requis',
+  LOGIN_EXISTANT: 'Ce login existe déjà',
+  EMAIL_REQUIS: 'Email requis',
+  EMAIL_EXISTANT: 'Cet email existe déjà',
+  UTILISATEUR_COMPTE_INITIAL_PROTEGE: 'Le Compte initial ne peut ni perdre son rôle ni être supprimé',
+  UTILISATEUR_ACTION_SUR_SOI_INTERDITE: 'Vous ne pouvez ni retirer votre propre rôle ni supprimer votre propre compte',
+};
+
+/** Corps d'un refus métier, avec le message français de repli. */
+export function errorBody(code: ErrorCode): ErrorBody {
+  return { code, message: ERROR_MESSAGES_FR[code] };
+}

@@ -1,4 +1,4 @@
-import type { ErrorCode } from '@app/shared';
+import { ERROR_MESSAGES_FR, type ErrorCode } from '@app/shared';
 
 // Dictionnaire de référence, repris de la source (ADR-0020).
 export const fr = {
@@ -83,25 +83,6 @@ export const fr = {
 
 export type UiKey = keyof typeof fr;
 
-// Codes d'erreur (ADR-0021) : l'indexation par ErrorCode garantit, à la
-// vérification des types, qu'aucun code du catalogue n'est oublié.
-export const frErrors: Record<ErrorCode, string> = {
-  ERREUR_INTERNE: 'Erreur interne du serveur',
-  IMPUTATION_INTROUVABLE: 'Imputation introuvable',
-  AUCUN_CHRONO_ACTIF: 'Aucun chronomètre actif',
-  IMPUTATION_CHAMPS_REQUIS: 'projetId, activiteId, heureDebut et heureFin sont requis',
-  IMPUTATION_FIN_AVANT_DEBUT: "L'heure de fin ne peut pas être antérieure à l'heure de début",
-  PLAGE_DATES_REQUISE: 'dateDebut et dateFin sont requis',
-  ACCES_REFUSE: 'Accès refusé',
-  PROJET_INTROUVABLE: 'Projet introuvable',
-  ACTIVITE_INTROUVABLE: 'Activité introuvable',
-  ACTIVITE_NOM_DUPLIQUE: 'Une Activité de ce nom existe déjà dans ce Projet',
-  UTILISATEUR_INTROUVABLE: 'Utilisateur introuvable',
-  NOM_REQUIS: 'Nom requis',
-  LOGIN_REQUIS: 'Login requis',
-  LOGIN_EXISTANT: 'Ce login existe déjà',
-  EMAIL_REQUIS: 'Email requis',
-  EMAIL_EXISTANT: 'Cet email existe déjà',
-  UTILISATEUR_COMPTE_INITIAL_PROTEGE: 'Le Compte initial ne peut ni perdre son rôle ni être supprimé',
-  UTILISATEUR_ACTION_SUR_SOI_INTERDITE: 'Vous ne pouvez ni retirer votre propre rôle ni supprimer votre propre compte',
-};
+// Codes d'erreur (ADR-0021) : messages français écrits une seule fois dans
+// @app/shared, renvoyés aussi par l'API en repli.
+export const frErrors: Record<ErrorCode, string> = ERROR_MESSAGES_FR;

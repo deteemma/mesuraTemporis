@@ -6,7 +6,7 @@ import { AppConfig } from './config/app-config.js';
 import { DatabaseService } from './db/database.service.js';
 import { HealthController } from './health/health.controller.js';
 import { ProjectsController } from './projects/projects.controller.js';
-import { ProjectRoleGuard } from './projects/project-role.guard.js';
+import { ProjectAccessGuard } from './projects/project-access.guard.js';
 import { ProjectsService } from './projects/projects.service.js';
 import { UsersService } from './users/users.service.js';
 
@@ -18,7 +18,7 @@ import { UsersService } from './users/users.service.js';
     OidcVerifier,
     UsersService,
     ProjectsService,
-    ProjectRoleGuard,
+    ProjectAccessGuard,
     { provide: APP_GUARD, useClass: AuthGuard },
   ],
 })

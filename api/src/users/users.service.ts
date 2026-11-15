@@ -3,32 +3,28 @@ import { sql } from 'kysely';
 import type { AuthenticatedUser } from '../auth/authenticated-user.js';
 import { DatabaseService } from '../db/database.service.js';
 
-const REFRESH_MS = 5 * 60 * 1000;
-
-/** Recopie dans app_user les utilisateurs qui se connectent (nom, e-mail). */
+/**
+ * Recopie dans app_user, à chaque nouveau jeton, le Login, l'Email et le Nom du
+ * compte Keycloak. Crée la ligne d'un compte né de Google à sa première requête.
+ */
 @Injectable()
 export class UsersService {
-  private readonly lastSeen = new Map<string, number>();
+  // Dernier jeton recopié par Utilisateur : un même jeton n'est recopié qu'une fois.
+  private readonly lastToken = new Map<string, string>();
 
   constructor(private readonly database: DatabaseService) {}
 
-  async remember(user: AuthenticatedUser): Promise<void> {
-    const seen = this.lastSeen.get(user.id);
-    if (seen && Date.now() - seen < REFRESH_MS) return;
+  async remember(user: AuthenticatedUser, token: string): Promise<void> {
+    if (this.lastToken.get(user.id) === token) return;
 
-    await this.database.asUser(user.id, (tx) =>
+    const values = { login: user.login, email: user.email, display_name: user.displayName };
+    await this.database.asUser(user, (tx) =>
       tx
         .insertInto('app_user')
-        .values({ id: user.id, email: user.email, display_name: user.displayName })
-        .onConflict((oc) =>
-          oc.column('id').doUpdateSet({
-            email: user.email,
-            display_name: user.displayName,
-            updated_at: sql`now()`,
-          }),
-        )
+        .values({ id: user.id, ...values })
+        .onConflict((oc) => oc.column('id').doUpdateSet({ ...values, updated_at: sql`now()` }))
         .execute(),
     );
-    this.lastSeen.set(user.id, Date.now());
+    this.lastToken.set(user.id, token);
   }
 }

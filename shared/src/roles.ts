@@ -1,30 +1,52 @@
 // Rôles et permissions : écrits une seule fois ici (ADR-0002), appliqués par
-// les guards de l'API et reproduits par les politiques RLS (ADR-0006).
+// les guards de l'API et reproduits par les politiques RLS (ADR-0006, ADR-0017).
 
-/** Rôles d'un membre sur un projet (l'ENTITÉ PARTAGÉE d'exemple). */
+/**
+ * Rôles d'équipe de l'ADR-0006. Seul `contributor` (l'Affecté) est attribué ;
+ * `owner` et `reader` restent déclarés mais ne sont jamais attribués (ADR-0017).
+ */
 export const PROJECT_ROLES = ['owner', 'contributor', 'reader'] as const;
 export type ProjectRole = (typeof PROJECT_ROLES)[number];
 
-/** Rôle global de l'application, porté par le jeton Keycloak (ADR-0005). */
+/** Rôle d'équipe porté par tout Affecté. */
+export const ASSIGNED_ROLE = 'contributor' satisfies ProjectRole;
+
+/** Rôle global de l'Administrateur, porté par le jeton Keycloak (ADR-0005). */
 export const APP_ADMIN_ROLE = 'administrateur';
 
-const RANK: Record<ProjectRole, number> = { reader: 1, contributor: 2, owner: 3 };
-
-/** Vrai si `role` donne au moins les droits de `required`. */
-export function hasAtLeast(role: ProjectRole | null | undefined, required: ProjectRole): boolean {
-  return role != null && RANK[role] >= RANK[required];
+/** Vrai si les rôles du jeton font de la personne un Administrateur. */
+export function isAdministrator(appRoles: readonly string[]): boolean {
+  return appRoles.includes(APP_ADMIN_ROLE);
 }
 
-/** Rôle minimal requis pour chaque action sur un projet. */
+/** Celui qui agit sur un Projet : Administrateur ou non, Affecté ou non. */
+export interface ProjectActor {
+  isAdmin: boolean;
+  isAssigned: boolean;
+}
+
+/**
+ * Qualité requise pour chaque opération sur un Projet (contrat d'API, #11).
+ * L'Administrateur peut tout, affecté ou non (ADR-0017).
+ */
 export const PROJECT_PERMISSIONS = {
-  view: 'reader',
-  edit: 'contributor',
-  manageMembers: 'owner',
-  delete: 'owner',
-} as const satisfies Record<string, ProjectRole>;
+  viewProject: 'assigned',
+  listActivities: 'assigned',
+  startTimer: 'assigned',
+  addManualEntry: 'assigned',
+  renameActivity: 'assigned',
+  createProject: 'admin',
+  deleteProject: 'admin',
+  manageTeam: 'admin',
+  // Hors Chronomètre (écran Activités du Projet). L'Affecté crée une Activité
+  // en démarrant un Chronomètre : c'est l'action `startTimer`.
+  createActivity: 'admin',
+  deleteActivity: 'admin',
+} as const satisfies Record<string, 'admin' | 'assigned'>;
 
 export type ProjectAction = keyof typeof PROJECT_PERMISSIONS;
 
-export function can(role: ProjectRole | null | undefined, action: ProjectAction): boolean {
-  return hasAtLeast(role, PROJECT_PERMISSIONS[action]);
+export function can(actor: ProjectActor, action: ProjectAction): boolean {
+  if (actor.isAdmin) return true;
+  return PROJECT_PERMISSIONS[action] === 'assigned' && actor.isAssigned;
 }

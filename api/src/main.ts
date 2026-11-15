@@ -4,7 +4,7 @@ import { NestFactory } from '@nestjs/core';
 import { FastifyAdapter, type NestFastifyApplication } from '@nestjs/platform-fastify';
 import { AppModule } from './app.module.js';
 import { AppConfig } from './config/app-config.js';
-import { SpaFallbackFilter } from './spa-fallback.filter.js';
+import { ApiExceptionFilter } from './api-exception.filter.js';
 
 async function bootstrap(): Promise<void> {
   const app = await NestFactory.create<NestFastifyApplication>(
@@ -20,7 +20,7 @@ async function bootstrap(): Promise<void> {
   if (webEnabled && config.webDistDir) {
     app.useStaticAssets({ root: config.webDistDir, prefix: '/' });
   }
-  app.useGlobalFilters(new SpaFallbackFilter(webEnabled));
+  app.useGlobalFilters(new ApiExceptionFilter(webEnabled));
 
   await app.listen(config.port, '0.0.0.0');
 }

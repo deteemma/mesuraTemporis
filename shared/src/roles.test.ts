@@ -1,22 +1,43 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { can, hasAtLeast } from './roles.js';
+import { ASSIGNED_ROLE, PROJECT_ROLES, can, isAdministrator } from './roles.js';
 
-test('le lecteur peut consulter mais pas modifier', () => {
-  assert.equal(can('reader', 'view'), true);
-  assert.equal(can('reader', 'edit'), false);
+const assignedUser = { isAdmin: false, isAssigned: true };
+
+test('un Affecté consulte le Projet, démarre un Chronomètre et renomme une Activité', () => {
+  assert.equal(can(assignedUser, 'viewProject'), true);
+  assert.equal(can(assignedUser, 'startTimer'), true);
+  assert.equal(can(assignedUser, 'renameActivity'), true);
 });
 
-test('le contributeur peut modifier mais pas gérer les membres', () => {
-  assert.equal(can('contributor', 'edit'), true);
-  assert.equal(can('contributor', 'manageMembers'), false);
+test('un Affecté n’administre ni le Projet, ni son équipe, ni ses Activités', () => {
+  assert.equal(can(assignedUser, 'deleteProject'), false);
+  assert.equal(can(assignedUser, 'manageTeam'), false);
+  assert.equal(can(assignedUser, 'createActivity'), false);
+  assert.equal(can(assignedUser, 'deleteActivity'), false);
 });
 
-test('le propriétaire a tous les droits', () => {
-  assert.equal(can('owner', 'delete'), true);
-  assert.equal(can('owner', 'manageMembers'), true);
+test('l’Administrateur peut tout sur un Projet, même sans y être affecté', () => {
+  const admin = { isAdmin: true, isAssigned: false };
+  assert.equal(can(admin, 'viewProject'), true);
+  assert.equal(can(admin, 'startTimer'), true);
+  assert.equal(can(admin, 'deleteProject'), true);
+  assert.equal(can(admin, 'manageTeam'), true);
 });
 
-test('un non-membre n’a aucun droit', () => {
-  assert.equal(hasAtLeast(null, 'reader'), false);
+test('un Utilisateur non affecté n’a aucun droit sur le Projet', () => {
+  const unassignedUser = { isAdmin: false, isAssigned: false };
+  assert.equal(can(unassignedUser, 'viewProject'), false);
+  assert.equal(can(unassignedUser, 'startTimer'), false);
+  assert.equal(can(unassignedUser, 'addManualEntry'), false);
+});
+
+test('l’Administrateur est reconnu au rôle « administrateur » du jeton', () => {
+  assert.equal(isAdministrator(['offline_access', 'administrateur']), true);
+  assert.equal(isAdministrator(['offline_access']), false);
+});
+
+test('seul le rôle d’équipe « contributor » est attribué', () => {
+  assert.equal(ASSIGNED_ROLE, 'contributor');
+  assert.deepEqual([...PROJECT_ROLES].sort(), ['contributor', 'owner', 'reader']);
 });

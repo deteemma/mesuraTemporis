@@ -4,9 +4,11 @@ import type { FastifyRequest } from 'fastify';
 /** Utilisateur extrait d'un jeton OIDC vérifié. */
 export interface AuthenticatedUser {
   id: string;
+  login: string;
   email: string | null;
   displayName: string | null;
-  appRoles: string[];
+  /** Rôle Keycloak « administrateur » (ADR-0017). */
+  isAdmin: boolean;
 }
 
 declare module 'fastify' {
@@ -19,9 +21,9 @@ export const IS_PUBLIC = 'isPublic';
 /** Route accessible sans jeton. */
 export const Public = () => SetMetadata(IS_PUBLIC, true);
 
-export const APP_ROLES = 'appRoles';
-/** Route réservée aux porteurs d'un rôle d'application (ex. « administrateur »). */
-export const RequireAppRole = (...roles: string[]) => SetMetadata(APP_ROLES, roles);
+export const ADMIN_REQUIRED = 'adminRequired';
+/** Route d'administration : 403 `ACCES_REFUSE` pour un non-Administrateur. */
+export const RequireAdmin = () => SetMetadata(ADMIN_REQUIRED, true);
 
 export const CurrentUser = createParamDecorator(
   (_data: unknown, ctx: ExecutionContext): AuthenticatedUser => {

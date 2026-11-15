@@ -47,7 +47,9 @@ bash scripts/tester-roles.sh
 ```
 
 Ouvrir https://modele.localhost et se connecter avec `alice` / `Test1234!`
-(autres comptes de test : `bruno`, `chloe`, `admin`).
+(autres comptes de test : `bruno`, `chloe`, et `diane`, Administrateur).
+Le Compte initial `admin` (mot de passe `admin`, à changer à la première
+connexion) est livré par le realm, sur le poste comme en production.
 
 ## Développement
 

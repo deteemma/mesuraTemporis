@@ -6,10 +6,17 @@ import type { Database } from './schema.js';
 
 export type Tx = Transaction<Database>;
 
+/** Ce que la base sait de l'Utilisateur courant (ADR-0017). */
+export interface DbActor {
+  id: string;
+  isAdmin: boolean;
+}
+
 /**
  * Accès à la base avec le compte applicatif, soumis à la RLS (ADR-0003).
- * Toute requête métier passe par `asUser` : l'utilisateur courant est transmis
- * à PostgreSQL pour la durée de la transaction, et les politiques RLS filtrent.
+ * Toute requête métier passe par `asUser` : l'Utilisateur courant et
+ * l'indicateur Administrateur sont transmis à PostgreSQL pour la durée de la
+ * transaction, et les politiques RLS filtrent.
  */
 @Injectable()
 export class DatabaseService implements OnModuleDestroy {
@@ -23,9 +30,10 @@ export class DatabaseService implements OnModuleDestroy {
     });
   }
 
-  asUser<T>(userId: string, work: (tx: Tx) => Promise<T>): Promise<T> {
+  asUser<T>(actor: DbActor, work: (tx: Tx) => Promise<T>): Promise<T> {
     return this.db.transaction().execute(async (tx) => {
-      await sql`SELECT set_config('app.user_id', ${userId}, true)`.execute(tx);
+      await sql`SELECT set_config('app.user_id', ${actor.id}, true),
+                       set_config('app.is_admin', ${actor.isAdmin ? 'true' : 'false'}, true)`.execute(tx);
       return work(tx);
     });
   }

@@ -7,7 +7,13 @@
       "firstName": "Alice",
       "enabled": true,
       "emailVerified": true,
-      "credentials": [{ "type": "password", "value": "Test1234!", "temporary": false }]
+      "credentials": [
+        {
+          "type": "password",
+          "value": "Test1234!",
+          "temporary": false
+        }
+      ]
     },
     {
       "username": "bruno",
@@ -15,7 +21,13 @@
       "firstName": "Bruno",
       "enabled": true,
       "emailVerified": true,
-      "credentials": [{ "type": "password", "value": "Test1234!", "temporary": false }]
+      "credentials": [
+        {
+          "type": "password",
+          "value": "Test1234!",
+          "temporary": false
+        }
+      ]
     },
     {
       "username": "chloe",
@@ -23,16 +35,30 @@
       "firstName": "Chloé",
       "enabled": true,
       "emailVerified": true,
-      "credentials": [{ "type": "password", "value": "Test1234!", "temporary": false }]
+      "credentials": [
+        {
+          "type": "password",
+          "value": "Test1234!",
+          "temporary": false
+        }
+      ]
     },
     {
-      "username": "admin",
-      "email": "admin@exemple.test",
-      "firstName": "Admin",
+      "username": "diane",
+      "email": "diane@exemple.test",
+      "firstName": "Diane",
       "enabled": true,
       "emailVerified": true,
-      "realmRoles": ["administrateur"],
-      "credentials": [{ "type": "password", "value": "Test1234!", "temporary": false }]
+      "realmRoles": [
+        "administrateur"
+      ],
+      "credentials": [
+        {
+          "type": "password",
+          "value": "Test1234!",
+          "temporary": false
+        }
+      ]
     }
   ],
   "clients": [

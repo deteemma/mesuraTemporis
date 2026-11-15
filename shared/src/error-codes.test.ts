@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { ERROR_CODES, isErrorCode } from './error-codes.js';
+import { ERROR_CODES, errorBody, isErrorCode } from './error-codes.js';
 
 test('le catalogue des Codes d’erreur est celui de la spécification #11', () => {
   assert.deepEqual([...ERROR_CODES].sort(), [
@@ -37,4 +37,8 @@ test('un code retiré de la source n’est plus reconnu', () => {
 test('une valeur qui n’est pas un texte n’est pas un code', () => {
   assert.equal(isErrorCode(undefined), false);
   assert.equal(isErrorCode(404), false);
+});
+
+test('un refus porte son Code d’erreur et le message français de repli', () => {
+  assert.deepEqual(errorBody('PROJET_INTROUVABLE'), { code: 'PROJET_INTROUVABLE', message: 'Projet introuvable' });
 });

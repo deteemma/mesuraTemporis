@@ -1,43 +1,30 @@
-// Schémas de validation partagés par l'API, le web et le mobile.
+// Schémas de validation partagés par l'API et le web.
+// Le message d'erreur d'un schéma est un Code d'erreur du catalogue (ADR-0021) :
+// l'API le renvoie tel quel dans le corps `{ code, message }` du refus.
 import { z } from 'zod';
-import { PROJECT_ROLES } from './roles.js';
+import type { ErrorCode } from './error-codes.js';
+import type { ProjectRole } from './roles.js';
 
-export const projectRoleSchema = z.enum(PROJECT_ROLES);
+const code = (value: ErrorCode) => ({ error: value });
 
-export const projectNameSchema = z.string().trim().min(1).max(120);
+/** Nom de Projet : requis, pas fait que d'espaces, sans limite de longueur (#11, E26). */
+export const projectNameSchema = z.string(code('NOM_REQUIS')).trim().min(1, code('NOM_REQUIS'));
 
+/** Création de Projet : son nom seul (#11). */
 export const createProjectSchema = z.object({
-  // Fourni par le mobile hors ligne, qui crée le projet localement avant de le
-  // synchroniser ; généré par l'API sinon.
+  // Envoyé par le mobile hors ligne (hors périmètre, non modifié, voir
+  // mobile/src/powersync.ts) ; généré par l'API sinon.
   id: z.uuid().optional(),
   name: projectNameSchema,
 });
 export type CreateProjectInput = z.infer<typeof createProjectSchema>;
 
-export const updateProjectSchema = z.object({
-  name: projectNameSchema,
-});
-export type UpdateProjectInput = z.infer<typeof updateProjectSchema>;
-
-export const addMemberSchema = z.object({
-  email: z.email(),
-  role: projectRoleSchema,
-});
-export type AddMemberInput = z.infer<typeof addMemberSchema>;
-
-/** Projet tel que renvoyé par l'API, avec le rôle de l'utilisateur courant. */
-export interface ProjectDto {
+/** Projet tel que renvoyé par l'API (badge « actif » repris à l'identique). */
+export interface ProjectSummaryDto {
   id: string;
   name: string;
+  status: string;
   createdAt: string;
-  myRole: z.infer<typeof projectRoleSchema>;
-}
-
-export interface ProjectMemberDto {
-  userId: string;
-  email: string | null;
-  displayName: string | null;
-  role: z.infer<typeof projectRoleSchema>;
 }
 
 /** Configuration publique servie par l'API à /api/config (web et mobile). */
@@ -46,4 +33,22 @@ export interface PublicConfigDto {
   webClientId: string;
   mobileClientId: string;
   powersyncUrl: string | null;
+}
+
+// --- Contrat de l'ancienne entité d'exemple, encore lu par le mobile ----------
+// Le mobile est hors périmètre et n'est pas modifié (#11) : ces types ne servent
+// qu'à sa compilation. Aucune route de l'API ne les produit plus. À retirer avec
+// la phase mobile.
+
+/** @deprecated Mobile seulement : personne ne renomme un Projet (#11). */
+export interface UpdateProjectInput {
+  name: string;
+}
+
+/** @deprecated Mobile seulement : remplacé par `ProjectSummaryDto`. */
+export interface ProjectDto {
+  id: string;
+  name: string;
+  createdAt: string;
+  myRole: ProjectRole;
 }

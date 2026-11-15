@@ -1,17 +1,15 @@
-import {
-  type CanActivate,
-  type ExecutionContext,
-  ForbiddenException,
-  Injectable,
-  UnauthorizedException,
-} from '@nestjs/common';
+import { type CanActivate, type ExecutionContext, Injectable, UnauthorizedException } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import type { FastifyRequest } from 'fastify';
+import { accessDenied } from '../errors.js';
 import { UsersService } from '../users/users.service.js';
-import { APP_ROLES, IS_PUBLIC } from './authenticated-user.js';
+import { ADMIN_REQUIRED, IS_PUBLIC } from './authenticated-user.js';
 import { OidcVerifier } from './oidc-verifier.service.js';
 
-/** Guard global : toute route exige un jeton valide, sauf celles marquées @Public(). */
+/**
+ * Guard global : toute route exige un jeton valide, sauf celles marquées
+ * @Public(). Les routes marquées @RequireAdmin() exigent l'Administrateur.
+ */
 @Injectable()
 export class AuthGuard implements CanActivate {
   constructor(
@@ -33,11 +31,10 @@ export class AuthGuard implements CanActivate {
     } catch {
       throw new UnauthorizedException();
     }
-    await this.users.remember(request.user);
+    await this.users.remember(request.user, token);
 
-    const required = this.reflector.getAllAndOverride<string[] | undefined>(APP_ROLES, targets);
-    if (required && !required.some((role) => request.user?.appRoles.includes(role))) {
-      throw new ForbiddenException();
+    if (this.reflector.getAllAndOverride<boolean>(ADMIN_REQUIRED, targets) && !request.user.isAdmin) {
+      throw accessDenied();
     }
     return true;
   }
