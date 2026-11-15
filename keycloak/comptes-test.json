@@ -5,7 +5,6 @@
       "username": "alice",
       "email": "alice@exemple.test",
       "firstName": "Alice",
-      "lastName": "Propriétaire",
       "enabled": true,
       "emailVerified": true,
       "credentials": [{ "type": "password", "value": "Test1234!", "temporary": false }]
@@ -14,7 +13,6 @@
       "username": "bruno",
       "email": "bruno@exemple.test",
       "firstName": "Bruno",
-      "lastName": "Contributeur",
       "enabled": true,
       "emailVerified": true,
       "credentials": [{ "type": "password", "value": "Test1234!", "temporary": false }]
@@ -23,7 +21,6 @@
       "username": "chloe",
       "email": "chloe@exemple.test",
       "firstName": "Chloé",
-      "lastName": "Lectrice",
       "enabled": true,
       "emailVerified": true,
       "credentials": [{ "type": "password", "value": "Test1234!", "temporary": false }]
@@ -32,7 +29,6 @@
       "username": "admin",
       "email": "admin@exemple.test",
       "firstName": "Admin",
-      "lastName": "Application",
       "enabled": true,
       "emailVerified": true,
       "realmRoles": ["administrateur"],
