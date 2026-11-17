@@ -27,6 +27,18 @@ export interface ProjectSummaryDto {
   createdAt: string;
 }
 
+/** Utilisateur tel que proposé à l'affectation et listé dans une équipe (par Login). */
+export interface UserSummaryDto {
+  id: string;
+  login: string;
+}
+
+/** Lecture d'impact avant la suppression d'un Projet (dialogue chiffré, E18). */
+export interface ProjectImpactDto {
+  activities: number;
+  timeEntries: number;
+}
+
 /** Configuration publique servie par l'API à /api/config (web et mobile). */
 export interface PublicConfigDto {
   oidcIssuerUrl: string;

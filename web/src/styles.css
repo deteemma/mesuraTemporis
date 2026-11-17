@@ -577,3 +577,123 @@ select {
     bottom: calc(var(--bottom-nav-height) + var(--space-4));
   }
 }
+
+/* Écrans d'administration : marges intérieures des cartes et des lignes (E20),
+   reprises de l'ébauche prototype/administration. */
+
+.page > h1 {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.card > .inline-form {
+  padding: var(--space-4) var(--space-5);
+}
+
+.card > .resource-list {
+  padding: 0 var(--space-5);
+}
+
+@media (max-width: 768px) {
+  .card > .inline-form {
+    padding: var(--space-3) var(--space-4);
+  }
+
+  .card > .resource-list {
+    padding: 0 var(--space-4);
+  }
+}
+
+/* Carte d'un Projet, avec son équipe */
+
+.project-card {
+  padding: var(--space-4) var(--space-5);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.project-card__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+}
+
+.project-card__title {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.project-card__name {
+  font-weight: 600;
+  font-size: var(--text-lg);
+}
+
+.project-card__actions {
+  display: flex;
+  gap: var(--space-2);
+}
+
+.project-card__team {
+  border-top: 1px solid var(--color-border);
+  padding-top: var(--space-3);
+}
+
+.project-card__subtitle {
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--color-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  margin: 0 0 var(--space-2);
+}
+
+.project-card__team .resource-list__item {
+  padding: var(--space-3) 0;
+}
+
+.project-card__assign {
+  margin-top: var(--space-3);
+}
+
+/* Dialogue de confirmation chiffré (E18) */
+
+.dialog-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(16, 24, 40, 0.4);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-4);
+  z-index: 1000;
+}
+
+.dialog {
+  max-width: 440px;
+  width: 100%;
+  padding: var(--space-5);
+}
+
+.dialog__title {
+  margin: 0 0 var(--space-3);
+  font-size: var(--text-lg);
+}
+
+.dialog__message {
+  margin: 0 0 var(--space-5);
+  font-size: var(--text-base);
+  overflow-wrap: anywhere;
+}
+
+.dialog__actions {
+  display: flex;
+  justify-content: flex-start;
+  gap: var(--space-2);
+}

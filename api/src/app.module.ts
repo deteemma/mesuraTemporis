@@ -8,10 +8,11 @@ import { HealthController } from './health/health.controller.js';
 import { ProjectsController } from './projects/projects.controller.js';
 import { ProjectAccessGuard } from './projects/project-access.guard.js';
 import { ProjectsService } from './projects/projects.service.js';
+import { UsersController } from './users/users.controller.js';
 import { UsersService } from './users/users.service.js';
 
 @Module({
-  controllers: [HealthController, ProjectsController],
+  controllers: [HealthController, ProjectsController, UsersController],
   providers: [
     { provide: AppConfig, useFactory: () => new AppConfig() },
     DatabaseService,

@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import type { UserSummaryDto } from '@app/shared';
 import { sql } from 'kysely';
 import type { AuthenticatedUser } from '../auth/authenticated-user.js';
 import { DatabaseService } from '../db/database.service.js';
@@ -26,5 +27,15 @@ export class UsersService {
         .execute(),
     );
     this.lastToken.set(user.id, token);
+  }
+
+  /**
+   * Utilisateurs connus de l'application, par Login (Administrateur ; la RLS
+   * ne montre que soi aux autres). Sert la liste « Affecter » de l'écran Projets.
+   */
+  list(user: AuthenticatedUser): Promise<UserSummaryDto[]> {
+    return this.database.asUser(user, (tx) =>
+      tx.selectFrom('app_user').select(['id', 'login']).orderBy('login').execute(),
+    );
   }
 }

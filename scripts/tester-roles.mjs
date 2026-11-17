@@ -171,6 +171,104 @@ await check('identifiant de Projet invalide ou inconnu : 404 PROJET_INTROUVABLE'
   assert.equal((await call(diane, 'GET', '/projects/00000000-0000-4000-8000-000000000000')).body.code, 'PROJET_INTROUVABLE');
 });
 
+console.log('\nÉcran Projets : création, équipe, lecture d’impact, suppression (API)');
+let p3;
+await check('diane crée un Projet par son seul nom : 201, badge « actif », équipe vide', async () => {
+  const r = await call(diane, 'POST', '/projects', { name: `  P3 ${RUN}  ` });
+  assert.equal(r.status, 201);
+  assert.equal(r.body.name, `P3 ${RUN}`);
+  assert.equal(r.body.status, 'actif');
+  p3 = r.body.id;
+  assert.deepEqual((await call(diane, 'GET', `/projects/${p3}/members`)).body, []);
+});
+await check('nom vide ou fait d’espaces : 400 NOM_REQUIS', async () => {
+  for (const name of [undefined, '', '   ']) {
+    const r = await call(diane, 'POST', '/projects', { name });
+    assert.equal(r.status, 400);
+    assert.equal(r.body.code, 'NOM_REQUIS');
+  }
+});
+await check('nom de Projet sans limite de longueur', async () => {
+  const r = await call(diane, 'POST', '/projects', { name: 'L'.repeat(1000) });
+  assert.equal(r.status, 201);
+  assert.equal((await call(diane, 'DELETE', `/projects/${r.body.id}`)).status, 204);
+});
+await check('diane liste les Utilisateurs connus de l’application (par Login)', async () => {
+  const r = await call(diane, 'GET', '/users');
+  assert.equal(r.status, 200);
+  const logins = r.body.map((u) => u.login);
+  for (const l of ['alice', 'bruno', 'chloe', 'diane']) assert.ok(logins.includes(l), l);
+  assert.deepEqual(r.body.find((u) => u.login === 'alice'), { id: alice.sub, login: 'alice' });
+});
+await check('diane affecte alice à P3 ; affecter une seconde fois est sans effet', async () => {
+  assert.equal((await call(diane, 'PUT', `/projects/${p3}/members/${alice.sub}`)).status, 204);
+  assert.equal((await call(diane, 'PUT', `/projects/${p3}/members/${alice.sub}`)).status, 204);
+  assert.deepEqual((await call(diane, 'GET', `/projects/${p3}/members`)).body, [{ id: alice.sub, login: 'alice' }]);
+});
+await check('alice (Affectée) voit P3 par l’API ; chloé (non affectée) reçoit 404', async () => {
+  assert.equal((await call(alice, 'GET', `/projects/${p3}`)).status, 200);
+  assert.ok((await call(alice, 'GET', '/projects')).body.some((p) => p.id === p3));
+  assert.equal((await call(chloe, 'GET', `/projects/${p3}`)).body.code, 'PROJET_INTROUVABLE');
+});
+await check('affecter un Utilisateur inconnu : 404 UTILISATEUR_INTROUVABLE ; un Projet inconnu : 404 PROJET_INTROUVABLE', async () => {
+  assert.equal((await call(diane, 'PUT', `/projects/${p3}/members/inconnu-${RUN}`)).body.code, 'UTILISATEUR_INTROUVABLE');
+  const unknown = '00000000-0000-4000-8000-000000000000';
+  assert.equal((await call(diane, 'PUT', `/projects/${unknown}/members/${alice.sub}`)).body.code, 'PROJET_INTROUVABLE');
+  assert.equal((await call(diane, 'GET', `/projects/${unknown}/impact`)).body.code, 'PROJET_INTROUVABLE');
+  assert.equal((await call(diane, 'DELETE', `/projects/${unknown}`)).body.code, 'PROJET_INTROUVABLE');
+});
+await check('alice (non Administrateur) : 403 ACCES_REFUSE sur création, suppression, équipe, lecture d’impact et liste des Utilisateurs', async () => {
+  const attempts = [
+    ['POST', '/projects', { name: 'Pirate' }],
+    ['DELETE', `/projects/${p3}`],
+    ['GET', `/projects/${p3}/members`],
+    ['PUT', `/projects/${p3}/members/${bruno.sub}`],
+    ['DELETE', `/projects/${p3}/members/${alice.sub}`],
+    ['GET', `/projects/${p3}/impact`],
+    ['GET', '/users'],
+  ];
+  for (const [method, path, body] of attempts) {
+    const r = await call(alice, method, path, body);
+    assert.equal(r.status, 403, `${method} ${path}`);
+    assert.equal(r.body.code, 'ACCES_REFUSE', `${method} ${path}`);
+  }
+  // chloé, non affectée, reçoit aussi 403 (et non 404) : l'administration est refusée d'abord.
+  assert.equal((await call(chloe, 'DELETE', `/projects/${p3}`)).status, 403);
+});
+await check('la lecture d’impact chiffre les Activités et les Imputations (Chronomètre compris) de P3', async () => {
+  const a3 = (await inDb(diane, async (q) =>
+    (await q(`INSERT INTO activity (id, project_id, name, normalized_name) VALUES (gen_random_uuid(), $1, 'Tests', 'tests') RETURNING id`, [p3])).rows[0].id,
+  { commit: true }));
+  await inDb(diane, (q) => q(`INSERT INTO activity (id, project_id, name, normalized_name) VALUES (gen_random_uuid(), $1, 'Vide', 'vide')`, [p3]), { commit: true });
+  await addEntry(alice, p3, a3);
+  await addEntry(diane, p3, a3);
+  await inDb(diane, (q) => q(`INSERT INTO time_entry (id, user_id, project_id, activity_id, started_at) VALUES (gen_random_uuid(), $1, $2, $3, now())`, [diane.sub, p3, a3]), { commit: true });
+  const r = await call(diane, 'GET', `/projects/${p3}/impact`);
+  assert.equal(r.status, 200);
+  assert.deepEqual(r.body, { activities: 2, timeEntries: 3 });
+});
+await check('diane retire alice de P3 : alice reçoit ensuite 404, ses Imputations restent', async () => {
+  assert.equal((await call(diane, 'DELETE', `/projects/${p3}/members/${alice.sub}`)).status, 204);
+  assert.deepEqual((await call(diane, 'GET', `/projects/${p3}/members`)).body, []);
+  assert.equal((await call(alice, 'GET', `/projects/${p3}`)).body.code, 'PROJET_INTROUVABLE');
+  assert.equal((await query(alice, `SELECT 1 FROM time_entry WHERE project_id = $1`, [p3])).rowCount, 1);
+});
+await check('diane supprime P3 : Activités, Imputations et équipe partent avec lui ; une seconde suppression répond 404', async () => {
+  await call(diane, 'PUT', `/projects/${p3}/members/${bruno.sub}`);
+  assert.equal((await call(diane, 'DELETE', `/projects/${p3}`)).status, 204);
+  await inDb(diane, async (q) => {
+    for (const table of ['project_member', 'activity', 'time_entry']) {
+      assert.equal((await q(`SELECT 1 FROM ${table} WHERE project_id = $1`, [p3])).rowCount, 0, table);
+    }
+  });
+  assert.equal((await call(diane, 'GET', `/projects/${p3}`)).body.code, 'PROJET_INTROUVABLE');
+  assert.equal((await call(diane, 'DELETE', `/projects/${p3}`)).body.code, 'PROJET_INTROUVABLE');
+});
+await check('personne ne renomme un Projet : aucune route de modification', async () => {
+  const r = await call(diane, 'PATCH', `/projects/${data.p1}`, { name: 'Renommé' });
+  assert.equal(r.status, 404);
+});
+
 console.log('\nBarrière 2 : base de données (RLS, compte applicatif)');
 await check('diane (Administrateur) voit tous les Utilisateurs, Projets, équipes et Imputations', async () => {
   await inDb(diane, async (q) => {
@@ -233,6 +331,23 @@ await check('un Utilisateur ne crée ni Projet ni affectation', async () => {
     query(alice, `INSERT INTO project_member (project_id, user_id) VALUES ($1, $2)`, [data.p2, alice.sub]),
     /row-level security/,
   );
+});
+await check('un Utilisateur, même Affecté, ne supprime ni Projet ni affectation, ne lit pas l’équipe des autres (sans effet)', async () => {
+  assert.equal((await query(alice, `DELETE FROM project WHERE id = $1`, [data.p1])).rowCount, 0);
+  assert.equal((await query(alice, `DELETE FROM project_member WHERE project_id = $1`, [data.p1])).rowCount, 0);
+  assert.equal((await query(alice, `SELECT 1 FROM project_member WHERE project_id = $1 AND user_id <> $2`, [data.p1, alice.sub])).rowCount, 0);
+  assert.equal((await query(alice, `DELETE FROM project_member WHERE project_id = $1 AND user_id = $2`, [data.p1, alice.sub])).rowCount, 0);
+});
+await check('l’Administrateur crée un Projet, affecte et retire en base', async () => {
+  await inDb(diane, async (q) => {
+    const p = (await q(`INSERT INTO project (id, name) VALUES (gen_random_uuid(), 'Admin en base') RETURNING id`)).rows[0].id;
+    await q(`INSERT INTO project_member (project_id, user_id) VALUES ($1, $2)`, [p, chloe.sub]);
+    assert.equal((await q(`DELETE FROM project_member WHERE project_id = $1 AND user_id = $2`, [p, chloe.sub])).rowCount, 1);
+    assert.equal((await q(`DELETE FROM project WHERE id = $1`, [p])).rowCount, 1);
+  });
+});
+await check('un nom de Projet fait d’espaces est refusé par la base', async () => {
+  await assert.rejects(query(diane, `INSERT INTO project (id, name) VALUES (gen_random_uuid(), '   ')`), /check constraint/);
 });
 await check('un non-affecté ne crée pas d’Imputation ; personne n’en crée pour autrui', async () => {
   await assert.rejects(addEntry(chloe, data.p1, data.a1), /row-level security/);
@@ -342,7 +457,7 @@ console.log('\nNettoyage');
 await check('suppression des Projets et Utilisateurs de test', async () => {
   await inDb(diane, async (q) => {
     await q(`DELETE FROM app_user WHERE id = $1`, [`test-cascade-${RUN}`]);
-    await q(`DELETE FROM project WHERE id = ANY($1)`, [[data.p1, data.p2]]);
+    await q(`DELETE FROM project WHERE id = ANY($1) OR name = $2`, [[data.p1, data.p2, p3].filter(Boolean), 'L'.repeat(1000)]);
   }, { commit: true });
 });
 

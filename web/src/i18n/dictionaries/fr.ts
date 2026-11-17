@@ -79,6 +79,8 @@ export const fr = {
   ACTIVITES_AUCUNE: "Aucune Activité pour l'instant.",
   ACTIVITES_PLACEHOLDER_RENOMMER: 'Renommer en…',
   BOUTON_RENOMMER: 'Renommer',
+  CONFIRMER_TITRE: 'Confirmer la suppression',
+  CONFIRMER_PROJET: 'Supprimer le Projet « {nom} » ? Ses {activites} Activités et les {imputations} Imputations associées seront supprimées définitivement.',
 };
 
 export type UiKey = keyof typeof fr;

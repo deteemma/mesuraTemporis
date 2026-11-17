@@ -16,3 +16,4 @@ export class BusinessError extends HttpException {
 
 export const accessDenied = () => new BusinessError(HttpStatus.FORBIDDEN, 'ACCES_REFUSE');
 export const projectNotFound = () => new BusinessError(HttpStatus.NOT_FOUND, 'PROJET_INTROUVABLE');
+export const userNotFound = () => new BusinessError(HttpStatus.NOT_FOUND, 'UTILISATEUR_INTROUVABLE');
