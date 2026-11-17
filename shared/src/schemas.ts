@@ -27,6 +27,29 @@ export interface ProjectSummaryDto {
   createdAt: string;
 }
 
+/** Nom d'Activité : mêmes règles que le nom de Projet (E26). */
+export const activityNameSchema = projectNameSchema;
+
+/** Création d'une Activité hors Chronomètre par l'Administrateur (écran Activités du Projet). */
+export const createActivitySchema = z.object({ name: activityNameSchema });
+export type CreateActivityInput = z.infer<typeof createActivitySchema>;
+
+/** Renommage d'une Activité, ouvert à tout Affecté (ADR-0015). */
+export const renameActivitySchema = z.object({ name: activityNameSchema });
+export type RenameActivityInput = z.infer<typeof renameActivitySchema>;
+
+/** Activité telle que renvoyée par l'API. */
+export interface ActivityDto {
+  id: string;
+  projectId: string;
+  name: string;
+}
+
+/** Lecture d'impact avant la suppression d'une Activité (dialogue chiffré, E18). */
+export interface ActivityImpactDto {
+  timeEntries: number;
+}
+
 /** Utilisateur tel que proposé à l'affectation et listé dans une équipe (par Login). */
 export interface UserSummaryDto {
   id: string;

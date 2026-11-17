@@ -82,6 +82,7 @@ export const en: Record<UiKey, string> = {
   BOUTON_RENOMMER: 'Rename',
   CONFIRMER_TITRE: 'Confirm deletion',
   CONFIRMER_PROJET: 'Delete project "{nom}"? Its {activites} activities and the {imputations} related time entries will be permanently deleted.',
+  CONFIRMER_ACTIVITE: 'Delete activity "{nom}"? The {imputations} related time entries will be permanently deleted.',
 };
 
 // Codes d'erreur (ADR-0021) : l'indexation par ErrorCode garantit, à la

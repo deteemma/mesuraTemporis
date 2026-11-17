@@ -103,6 +103,7 @@ select {
   cursor: pointer;
   transition: background-color 0.15s ease, border-color 0.15s ease;
   white-space: nowrap;
+  text-decoration: none; /* lien présenté en bouton (« Activités » de l'écran Projets) */
 }
 
 .btn:disabled {
@@ -234,9 +235,14 @@ select {
 
 .resource-list__actions {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: var(--space-2);
   margin-left: auto;
+}
+
+.resource-list__actions .field {
+  min-width: 160px;
 }
 
 .resource-list__vide {

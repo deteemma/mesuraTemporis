@@ -82,6 +82,7 @@ export const it: Record<UiKey, string> = {
   BOUTON_RENOMMER: 'Rinomina',
   CONFIRMER_TITRE: 'Conferma eliminazione',
   CONFIRMER_PROJET: 'Eliminare il Progetto «{nom}»? Le sue {activites} Attività e le {imputations} voci associate saranno eliminate definitivamente.',
+  CONFIRMER_ACTIVITE: "Eliminare l'Attività «{nom}»? Le {imputations} voci associate saranno eliminate definitivamente.",
 };
 
 // Codes d'erreur (ADR-0021) : l'indexation par ErrorCode garantit, à la

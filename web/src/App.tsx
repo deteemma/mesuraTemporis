@@ -5,6 +5,7 @@ import type { ReactNode } from 'react';
 import { isAdministrator, logout } from './auth';
 import { useLanguage } from './i18n/i18n';
 import { LanguageSwitcher } from './LanguageSwitcher';
+import { ACTIVITIES_PATH, ActivitiesPage } from './pages/ActivitiesPage';
 import { MyProjectsPage } from './pages/MyProjectsPage';
 import { ProjectsPage } from './pages/ProjectsPage';
 import { ReportPage } from './pages/ReportPage';
@@ -74,6 +75,8 @@ export function App({ user }: { user: User }) {
   const screens = SCREENS.filter((screen) => admin || !screen.adminOnly);
   // Adresse inconnue, ou écran réservé à l'Administrateur (E25) : retour à la Saisie de temps.
   const screen = screens.find((s) => s.path === path);
+  // Activités du Projet : ouvert depuis l'écran Projets, hors menu, réservé à l'Administrateur.
+  const activitiesProjectId = admin ? ACTIVITIES_PATH.exec(path)?.[1] : undefined;
 
   return (
     <div className="shell">
@@ -97,7 +100,15 @@ export function App({ user }: { user: User }) {
         </button>
       </nav>
 
-      <main className="shell__content">{screen ? <screen.page /> : <Redirect to={HOME_PATH} />}</main>
+      <main className="shell__content">
+        {activitiesProjectId ? (
+          <ActivitiesPage key={activitiesProjectId} projectId={decodeURIComponent(activitiesProjectId)} />
+        ) : screen ? (
+          <screen.page />
+        ) : (
+          <Redirect to={HOME_PATH} />
+        )}
+      </main>
 
       <nav className="bottomnav">
         {screens.map((s) => (

@@ -7,6 +7,8 @@ import { request } from '../api';
 import { DeleteButton } from '../DeleteButton';
 import { useLanguage } from '../i18n/i18n';
 import { useNotifyError } from '../notifications';
+import { Link } from '../router';
+import { activitiesPath } from './ActivitiesPage';
 
 export function ProjectsPage() {
   const { t } = useLanguage();
@@ -138,6 +140,9 @@ function ProjectCard({ project, users, onDeleted }: ProjectCardProps) {
           <span className="badge">{t('STATUT_ACTIF')}</span>
         </div>
         <div className="project-card__actions">
+          <Link to={activitiesPath(project.id)} className="btn btn-secondary">
+            {t('PROJETS_LIEN_ACTIVITES')}
+          </Link>
           <DeleteButton describe={describeDeletion} onConfirm={() => void remove()} />
         </div>
       </div>

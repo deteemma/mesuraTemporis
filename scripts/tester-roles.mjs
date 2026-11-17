@@ -269,6 +269,165 @@ await check('personne ne renomme un Projet : aucune route de modification', asyn
   assert.equal(r.status, 404);
 });
 
+console.log('\nÉcran Activités du Projet : lister, créer, renommer, supprimer (API)');
+// P4 : alice affectée, chloé non affectée.
+let p4;
+const activitiesOf = async (projectId) =>
+  (await query(diane, `SELECT name FROM activity WHERE project_id = $1 ORDER BY created_at, id`, [projectId])).rows.map((r) => r.name);
+const act = {};
+await check('diane crée des Activités dans P4 : 201, nom aux espaces de bord retirés', async () => {
+  p4 = (await call(diane, 'POST', '/projects', { name: `P4 ${RUN}` })).body.id;
+  await call(diane, 'PUT', `/projects/${p4}/members/${alice.sub}`);
+  const r = await call(diane, 'POST', `/projects/${p4}/activities`, { name: '  Réunion ' });
+  assert.equal(r.status, 201);
+  assert.deepEqual(r.body, { id: r.body.id, projectId: p4, name: 'Réunion' });
+  act.meeting = r.body.id;
+  act.analysis = (await call(diane, 'POST', `/projects/${p4}/activities`, { name: 'Analyse' })).body.id;
+  const stored = await query(diane, `SELECT normalized_name FROM activity WHERE id = $1`, [act.meeting]);
+  assert.equal(stored.rows[0].normalized_name, 'reunion');
+});
+await check('création d’un nom déjà présent dans le Projet (casse et accents ignorés) : 409 ACTIVITE_NOM_DUPLIQUE', async () => {
+  for (const name of ['Réunion', 'REUNION', ' réunion ', 'Réunion']) {
+    const r = await call(diane, 'POST', `/projects/${p4}/activities`, { name });
+    assert.equal(r.status, 409, name);
+    assert.deepEqual(r.body, { code: 'ACTIVITE_NOM_DUPLIQUE', message: 'Une Activité de ce nom existe déjà dans ce Projet' });
+  }
+});
+await check('le même nom reste permis dans un autre Projet', async () => {
+  const r = await call(diane, 'POST', `/projects/${data.p2}/activities`, { name: 'réunion' });
+  assert.equal(r.status, 201);
+  assert.equal((await call(diane, 'DELETE', `/projects/${data.p2}/activities/${r.body.id}`)).status, 204);
+});
+await check('nom d’Activité vide ou fait d’espaces : 400 NOM_REQUIS, à la création comme au renommage', async () => {
+  for (const name of [undefined, '', '  ']) {
+    assert.equal((await call(diane, 'POST', `/projects/${p4}/activities`, { name })).body.code, 'NOM_REQUIS');
+    assert.equal((await call(alice, 'PATCH', `/projects/${p4}/activities/${act.meeting}`, { name })).body.code, 'NOM_REQUIS');
+  }
+});
+await check('deux créations simultanées du même nom : une seule réussit, l’autre reçoit 409', async () => {
+  const results = await Promise.all(
+    ['Simultanée', 'SIMULTANEE', 'simultanée', 'Simultanee'].map((name) => call(diane, 'POST', `/projects/${p4}/activities`, { name })),
+  );
+  assert.deepEqual(results.map((r) => r.status).sort(), [201, 409, 409, 409]);
+  for (const r of results.filter((x) => x.status === 409)) assert.equal(r.body.code, 'ACTIVITE_NOM_DUPLIQUE');
+  assert.equal((await activitiesOf(p4)).length, 3);
+});
+await check('alice (Affectée) liste les Activités de P4, dans leur ordre de création', async () => {
+  const r = await call(alice, 'GET', `/projects/${p4}/activities`);
+  assert.equal(r.status, 200);
+  assert.deepEqual(r.body.slice(0, 2), [
+    { id: act.meeting, projectId: p4, name: 'Réunion' },
+    { id: act.analysis, projectId: p4, name: 'Analyse' },
+  ]);
+  assert.equal(r.body.length, 3);
+});
+await check('alice (Affectée) renomme une Activité ; reconfirmer son nom ou en changer la casse est permis', async () => {
+  let r = await call(alice, 'PATCH', `/projects/${p4}/activities/${act.meeting}`, { name: ' Réunion hebdo ' });
+  assert.equal(r.status, 200);
+  assert.deepEqual(r.body, { id: act.meeting, projectId: p4, name: 'Réunion hebdo' });
+  r = await call(alice, 'PATCH', `/projects/${p4}/activities/${act.meeting}`, { name: 'Réunion hebdo' });
+  assert.equal(r.status, 200);
+  r = await call(diane, 'PATCH', `/projects/${p4}/activities/${act.meeting}`, { name: 'RÉUNION HEBDO' });
+  assert.equal(r.status, 200);
+  assert.equal(r.body.name, 'RÉUNION HEBDO');
+});
+await check('renommer vers le nom d’une autre Activité du Projet : 409 ACTIVITE_NOM_DUPLIQUE', async () => {
+  const r = await call(alice, 'PATCH', `/projects/${p4}/activities/${act.meeting}`, { name: 'analyse' });
+  assert.equal(r.status, 409);
+  assert.equal(r.body.code, 'ACTIVITE_NOM_DUPLIQUE');
+  assert.ok((await activitiesOf(p4)).includes('RÉUNION HEBDO'));
+});
+await check('alice (Affectée) ne crée pas hors Chronomètre, ne supprime pas, ne lit pas l’impact : 403 ACCES_REFUSE', async () => {
+  const attempts = [
+    ['POST', `/projects/${p4}/activities`, { name: 'Pirate' }],
+    ['DELETE', `/projects/${p4}/activities/${act.analysis}`],
+    ['GET', `/projects/${p4}/activities/${act.analysis}/impact`],
+  ];
+  for (const [method, path, body] of attempts) {
+    const r = await call(alice, method, path, body);
+    assert.equal(r.status, 403, `${method} ${path}`);
+    assert.equal(r.body.code, 'ACCES_REFUSE', `${method} ${path}`);
+  }
+});
+await check('chloé (non affectée) : 404 PROJET_INTROUVABLE pour lister et renommer', async () => {
+  for (const [method, path, body] of [
+    ['GET', `/projects/${p4}/activities`],
+    ['PATCH', `/projects/${p4}/activities/${act.analysis}`, { name: 'Piratée' }],
+  ]) {
+    const r = await call(chloe, method, path, body);
+    assert.equal(r.status, 404, `${method} ${path}`);
+    assert.equal(r.body.code, 'PROJET_INTROUVABLE', `${method} ${path}`);
+  }
+});
+await check('Activité inconnue, d’un autre Projet ou identifiant invalide : 404 ACTIVITE_INTROUVABLE', async () => {
+  const unknown = '00000000-0000-4000-8000-000000000000';
+  for (const id of [unknown, data.a2, 'pas-un-uuid']) {
+    assert.equal((await call(alice, 'PATCH', `/projects/${p4}/activities/${id}`, { name: 'X' })).body.code, 'ACTIVITE_INTROUVABLE', id);
+    assert.equal((await call(diane, 'DELETE', `/projects/${p4}/activities/${id}`)).body.code, 'ACTIVITE_INTROUVABLE', id);
+    assert.equal((await call(diane, 'GET', `/projects/${p4}/activities/${id}/impact`)).body.code, 'ACTIVITE_INTROUVABLE', id);
+  }
+  assert.equal((await call(diane, 'GET', `/projects/${unknown}/activities`)).body.code, 'PROJET_INTROUVABLE');
+  assert.equal((await call(diane, 'POST', `/projects/${unknown}/activities`, { name: 'X' })).body.code, 'PROJET_INTROUVABLE');
+});
+await check('la lecture d’impact chiffre les Imputations de l’Activité (Chronomètre compris)', async () => {
+  await addEntry(alice, p4, act.meeting);
+  await addEntry(diane, p4, act.analysis);
+  await inDb(diane, (q) => q(`INSERT INTO time_entry (id, user_id, project_id, activity_id, started_at) VALUES (gen_random_uuid(), $1, $2, $3, now())`,
+    [diane.sub, p4, act.meeting]), { commit: true });
+  const r = await call(diane, 'GET', `/projects/${p4}/activities/${act.meeting}/impact`);
+  assert.equal(r.status, 200);
+  assert.deepEqual(r.body, { timeEntries: 2 });
+});
+await check('diane supprime l’Activité : ses Imputations (Chronomètre compris) partent avec elle, pas celles des autres ; une seconde suppression répond 404', async () => {
+  assert.equal((await call(diane, 'DELETE', `/projects/${p4}/activities/${act.meeting}`)).status, 204);
+  await inDb(diane, async (q) => {
+    assert.equal((await q(`SELECT 1 FROM time_entry WHERE activity_id = $1`, [act.meeting])).rowCount, 0);
+    assert.equal((await q(`SELECT 1 FROM time_entry WHERE activity_id = $1`, [act.analysis])).rowCount, 1);
+  });
+  assert.equal((await call(diane, 'DELETE', `/projects/${p4}/activities/${act.meeting}`)).body.code, 'ACTIVITE_INTROUVABLE');
+});
+await check('alice retirée de P4 ne peut plus lister ni renommer : 404 PROJET_INTROUVABLE', async () => {
+  await call(diane, 'DELETE', `/projects/${p4}/members/${alice.sub}`);
+  assert.equal((await call(alice, 'GET', `/projects/${p4}/activities`)).body.code, 'PROJET_INTROUVABLE');
+  assert.equal((await call(alice, 'PATCH', `/projects/${p4}/activities/${act.analysis}`, { name: 'Après retrait' })).body.code, 'PROJET_INTROUVABLE');
+  await call(diane, 'PUT', `/projects/${p4}/members/${alice.sub}`);
+});
+
+console.log('\nActivités : barrière 2 (RLS, compte applicatif)');
+const insertActivity = (actor, projectId, name, normalized) =>
+  query(actor, `INSERT INTO activity (id, project_id, name, normalized_name) VALUES (gen_random_uuid(), $1, $2, $3)`, [projectId, name, normalized]);
+await check('alice (Affectée) voit, crée (au Chronomètre) et renomme en base, mais ne supprime pas (sans effet)', async () => {
+  assert.ok(ids(await query(alice, `SELECT id FROM activity WHERE project_id = $1`, [p4])).includes(act.analysis));
+  await insertActivity(alice, p4, 'Créée par alice', 'creee par alice');
+  assert.equal((await query(alice, `UPDATE activity SET name = 'Analyse 2', normalized_name = 'analyse 2' WHERE id = $1`, [act.analysis])).rowCount, 1);
+  assert.equal((await query(alice, `DELETE FROM activity WHERE id = $1`, [act.analysis])).rowCount, 0);
+});
+await check('chloé (non affectée) ne voit, ne crée, ne renomme ni ne supprime en base', async () => {
+  assert.equal((await query(chloe, `SELECT 1 FROM activity WHERE project_id = $1`, [p4])).rowCount, 0);
+  await assert.rejects(insertActivity(chloe, p4, 'Pirate', 'pirate'), /row-level security/);
+  assert.equal((await query(chloe, `UPDATE activity SET name = 'Piratée', normalized_name = 'piratee' WHERE id = $1`, [act.analysis])).rowCount, 0);
+  assert.equal((await query(chloe, `DELETE FROM activity WHERE id = $1`, [act.analysis])).rowCount, 0);
+});
+await check('diane (Administrateur, non affectée) voit, crée, renomme et supprime en base', async () => {
+  await inDb(diane, async (q) => {
+    const id = (await q(`INSERT INTO activity (id, project_id, name, normalized_name) VALUES (gen_random_uuid(), $1, 'Admin', 'admin') RETURNING id`, [p4])).rows[0].id;
+    assert.equal((await q(`UPDATE activity SET name = 'Admin 2', normalized_name = 'admin 2' WHERE id = $1`, [id])).rowCount, 1);
+    assert.equal((await q(`DELETE FROM activity WHERE id = $1`, [id])).rowCount, 1);
+  });
+});
+await check('deux transactions simultanées créant le même nom normalisé : la base n’en garde qu’une', async () => {
+  const results = await Promise.allSettled(
+    [alice, diane].map((actor) => inDb(actor, (q) => q(
+      `INSERT INTO activity (id, project_id, name, normalized_name) VALUES (gen_random_uuid(), $1, $2, 'concurrente')`,
+      [p4, actor === alice ? 'Concurrente' : 'CONCURRENTE']), { commit: true })),
+  );
+  assert.deepEqual(results.map((r) => r.status).sort(), ['fulfilled', 'rejected']);
+  assert.match(results.find((r) => r.status === 'rejected').reason.message, /activity_project_name_key/);
+  assert.equal((await query(diane, `SELECT 1 FROM activity WHERE project_id = $1 AND normalized_name = 'concurrente'`, [p4])).rowCount, 1);
+});
+// alice ne reste affectée qu'à P1 pour les contrôles suivants.
+await call(diane, 'DELETE', `/projects/${p4}/members/${alice.sub}`);
+
 console.log('\nBarrière 2 : base de données (RLS, compte applicatif)');
 await check('diane (Administrateur) voit tous les Utilisateurs, Projets, équipes et Imputations', async () => {
   await inDb(diane, async (q) => {
@@ -283,7 +442,8 @@ await check('diane (Administrateur) voit tous les Utilisateurs, Projets, équipe
 await check('alice ne voit que sa ligne Utilisateur, ses affectations et ses Imputations', async () => {
   await inDb(alice, async (q) => {
     assert.deepEqual(ids(await q(`SELECT id FROM app_user`)), [alice.sub]);
-    assert.deepEqual((await q(`SELECT user_id FROM project_member`)).rows.map((r) => r.user_id), [alice.sub]);
+    // Toutes ses affectations, quels que soient les Projets déjà présents en base.
+    assert.deepEqual([...new Set((await q(`SELECT user_id FROM project_member`)).rows.map((r) => r.user_id))], [alice.sub]);
     assert.deepEqual(ids(await q(`SELECT id FROM time_entry`)), [data.aliceEntry]);
   });
 });
@@ -457,7 +617,7 @@ console.log('\nNettoyage');
 await check('suppression des Projets et Utilisateurs de test', async () => {
   await inDb(diane, async (q) => {
     await q(`DELETE FROM app_user WHERE id = $1`, [`test-cascade-${RUN}`]);
-    await q(`DELETE FROM project WHERE id = ANY($1) OR name = $2`, [[data.p1, data.p2, p3].filter(Boolean), 'L'.repeat(1000)]);
+    await q(`DELETE FROM project WHERE id = ANY($1) OR name = $2`, [[data.p1, data.p2, p3, p4].filter(Boolean), 'L'.repeat(1000)]);
   }, { commit: true });
 });
 

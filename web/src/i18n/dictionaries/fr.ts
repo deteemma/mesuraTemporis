@@ -81,6 +81,7 @@ export const fr = {
   BOUTON_RENOMMER: 'Renommer',
   CONFIRMER_TITRE: 'Confirmer la suppression',
   CONFIRMER_PROJET: 'Supprimer le Projet « {nom} » ? Ses {activites} Activités et les {imputations} Imputations associées seront supprimées définitivement.',
+  CONFIRMER_ACTIVITE: "Supprimer l'Activité « {nom} » ? Les {imputations} Imputations associées seront supprimées définitivement.",
 };
 
 export type UiKey = keyof typeof fr;

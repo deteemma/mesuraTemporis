@@ -82,6 +82,7 @@ export const de: Record<UiKey, string> = {
   BOUTON_RENOMMER: 'Umbenennen',
   CONFIRMER_TITRE: 'Löschen bestätigen',
   CONFIRMER_PROJET: 'Projekt „{nom}“ löschen? Seine {activites} Aktivitäten und die {imputations} zugehörigen Einträge werden endgültig gelöscht.',
+  CONFIRMER_ACTIVITE: 'Aktivität „{nom}“ löschen? Die {imputations} zugehörigen Einträge werden endgültig gelöscht.',
 };
 
 // Codes d'erreur (ADR-0021) : l'indexation par ErrorCode garantit, à la
