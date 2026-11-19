@@ -425,6 +425,167 @@ await check('deux transactions simultanées créant le même nom normalisé : la
   assert.match(results.find((r) => r.status === 'rejected').reason.message, /activity_project_name_key/);
   assert.equal((await query(diane, `SELECT 1 FROM activity WHERE project_id = $1 AND normalized_name = 'concurrente'`, [p4])).rowCount, 1);
 });
+console.log('\nSaisie de temps : recherche combinée, Chronomètre, Journée (API et base)');
+// P5 : alice et bruno affectés (Activités « Réunion », « Analyse ») ; P6 : personne
+// (Activité « Réunion »). diane (Administrateur) n'est affectée à aucun des deux.
+const fixture = {};
+fixture.p5 = (await call(diane, 'POST', '/projects', { name: `P5 ${RUN}` })).body.id;
+fixture.p6 = (await call(diane, 'POST', '/projects', { name: `P6 ${RUN}` })).body.id;
+await call(diane, 'PUT', `/projects/${fixture.p5}/members/${alice.sub}`);
+await call(diane, 'PUT', `/projects/${fixture.p5}/members/${bruno.sub}`);
+fixture.meeting5 = (await call(diane, 'POST', `/projects/${fixture.p5}/activities`, { name: 'Réunion' })).body.id;
+fixture.analysis5 = (await call(diane, 'POST', `/projects/${fixture.p5}/activities`, { name: 'Analyse' })).body.id;
+fixture.meeting6 = (await call(diane, 'POST', `/projects/${fixture.p6}/activities`, { name: 'Réunion' })).body.id;
+const searchIn = async (user, q, projects) =>
+  (await call(user, 'GET', `/activities/search?q=${encodeURIComponent(q)}`)).body.filter((r) => projects.includes(r.projectId));
+const runningOf = async (user) =>
+  (await query(diane, `SELECT id FROM time_entry WHERE user_id = $1 AND ended_at IS NULL`, [user.sub])).rows.map((r) => r.id);
+const start = (user, body) => call(user, 'POST', '/time-entries/timer/start', body);
+
+await check('recherche combinée : préfixe ou sous-chaîne, casse et accents ignorés, sur les seuls Projets affectés', async () => {
+  for (const q of ['réu', 'REU', 'union', 'RÉUNION']) {
+    assert.deepEqual(await searchIn(alice, q, [fixture.p5, fixture.p6]), [
+      { id: fixture.meeting5, name: 'Réunion', projectId: fixture.p5, projectName: `P5 ${RUN}` },
+    ], q);
+  }
+  assert.deepEqual(await searchIn(chloe, 'réu', [fixture.p5, fixture.p6]), []);
+});
+await check('recherche combinée de l’Administrateur : tous les Projets, une ligne par Projet', async () => {
+  const r = await searchIn(diane, 'reunion', [fixture.p5, fixture.p6]);
+  assert.deepEqual(r.map((x) => x.id).sort(), [fixture.meeting5, fixture.meeting6].sort());
+});
+await check('alice démarre un Chronomètre sur une Activité existante : 201, retrouvé par l’état du Chronomètre', async () => {
+  const r = await start(alice, { projectId: fixture.p5, activityId: fixture.meeting5 });
+  assert.equal(r.status, 201);
+  assert.equal(r.body.previousTimerStopped, null);
+  assert.equal(r.body.timer.endedAt, null);
+  assert.deepEqual(
+    { userId: r.body.timer.userId, projectName: r.body.timer.projectName, activityName: r.body.timer.activityName },
+    { userId: alice.sub, projectName: `P5 ${RUN}`, activityName: 'Réunion' },
+  );
+  fixture.first = r.body.timer;
+  assert.deepEqual((await call(alice, 'GET', '/time-entries/timer')).body, { timer: fixture.first });
+});
+await check('démarrer arrête le Chronomètre en cours au même instant et l’indique ; un nom existant (casse, accents) réutilise l’Activité', async () => {
+  const r = await start(alice, { projectId: fixture.p5, newActivityName: '  REUNION ' });
+  assert.equal(r.status, 201);
+  assert.equal(r.body.timer.activityId, fixture.meeting5);
+  assert.equal(r.body.previousTimerStopped.id, fixture.first.id);
+  assert.equal(r.body.previousTimerStopped.endedAt, r.body.timer.startedAt);
+  assert.deepEqual(await runningOf(alice), [r.body.timer.id]);
+  assert.equal((await query(diane, `SELECT 1 FROM activity WHERE project_id = $1`, [fixture.p5])).rowCount, 2);
+});
+await check('un nouveau nom crée l’Activité dans le Projet choisi en démarrant', async () => {
+  const r = await start(alice, { projectId: fixture.p5, newActivityName: 'Rédaction' });
+  assert.equal(r.status, 201);
+  assert.equal(r.body.timer.activityName, 'Rédaction');
+  assert.ok(r.body.previousTimerStopped);
+  const stored = await query(diane, `SELECT name, normalized_name FROM activity WHERE id = $1`, [r.body.timer.activityId]);
+  assert.deepEqual(stored.rows, [{ name: 'Rédaction', normalized_name: 'redaction' }]);
+});
+await check('démarrages simultanés : un seul Chronomètre ; un même nouveau nom ne crée qu’une Activité', async () => {
+  const results = await Promise.all([
+    start(alice, { projectId: fixture.p5, newActivityName: 'Atelier' }),
+    start(alice, { projectId: fixture.p5, newActivityName: 'ATELIER' }),
+    start(alice, { projectId: fixture.p5, activityId: fixture.analysis5 }),
+    start(bruno, { projectId: fixture.p5, newActivityName: 'atelier' }),
+  ]);
+  assert.deepEqual(results.map((r) => r.status), [201, 201, 201, 201]);
+  assert.equal((await runningOf(alice)).length, 1);
+  assert.equal((await runningOf(bruno)).length, 1);
+  assert.equal((await query(diane, `SELECT 1 FROM activity WHERE project_id = $1 AND normalized_name = 'atelier'`, [fixture.p5])).rowCount, 1);
+});
+await check('chloé (non affectée) démarre sur P5 : 404 PROJET_INTROUVABLE ; Projet inconnu, invalide ou absent : 404', async () => {
+  for (const projectId of [fixture.p5, '00000000-0000-4000-8000-000000000000', 'pas-un-uuid', undefined]) {
+    const r = await start(chloe, { projectId, activityId: fixture.meeting5 });
+    assert.equal(r.status, 404, String(projectId));
+    assert.equal(r.body.code, 'PROJET_INTROUVABLE', String(projectId));
+  }
+  assert.deepEqual(await runningOf(chloe), []);
+});
+await check('Activité absente, inconnue ou d’un autre Projet : 404 ACTIVITE_INTROUVABLE ; nouveau nom vide : 400 NOM_REQUIS', async () => {
+  for (const activityId of [undefined, fixture.meeting6, 'pas-un-uuid']) {
+    const r = await start(alice, { projectId: fixture.p5, activityId });
+    assert.equal(r.status, 404, String(activityId));
+    assert.equal(r.body.code, 'ACTIVITE_INTROUVABLE', String(activityId));
+  }
+  const r = await start(alice, { projectId: fixture.p5, newActivityName: '   ' });
+  assert.equal(r.status, 400);
+  assert.equal(r.body.code, 'NOM_REQUIS');
+});
+await check('diane (Administrateur, non affectée) démarre sur P6 : son propre Chronomètre', async () => {
+  const r = await start(diane, { projectId: fixture.p6, activityId: fixture.meeting6 });
+  assert.equal(r.status, 201);
+  assert.equal(r.body.timer.userId, diane.sub);
+});
+await check('un Affecté ne voit pas les Imputations des autres, ni par l’API ni en base', async () => {
+  const brunoToday = (await call(bruno, 'GET', '/time-entries/today')).body;
+  assert.ok(brunoToday.length > 0);
+  assert.ok(brunoToday.every((e) => e.userId === bruno.sub));
+  assert.equal((await call(bruno, 'GET', '/time-entries/timer')).body.timer.userId, bruno.sub);
+  assert.equal((await query(bruno, `SELECT 1 FROM time_entry WHERE user_id <> $1`, [bruno.sub])).rowCount, 0);
+  // L'Administrateur lui-même ne lit par l'API que ses propres Imputations de la Journée.
+  assert.ok((await call(diane, 'GET', '/time-entries/today')).body.every((e) => e.userId === diane.sub));
+});
+await check('Imputations de la Journée : Chronomètre compris, les plus récentes d’abord', async () => {
+  const entries = (await call(alice, 'GET', '/time-entries/today')).body;
+  assert.ok(entries.length >= 4);
+  assert.ok(entries.some((e) => e.endedAt === null));
+  const starts = entries.map((e) => e.startedAt);
+  assert.deepEqual(starts, [...starts].sort().reverse());
+});
+await check('une Imputation franchissant minuit (Europe/Zurich) reste une seule ligne, dans la Journée de son début', async () => {
+  // De 23:30 la veille à 00:30 aujourd'hui, heure de Zurich.
+  const crossing = await inDb(alice, async (q) => (await q(`
+    WITH midnight AS (SELECT (date_trunc('day', now() AT TIME ZONE 'Europe/Zurich') AT TIME ZONE 'Europe/Zurich') AS m)
+    INSERT INTO time_entry (id, user_id, project_id, activity_id, started_at, ended_at)
+    SELECT gen_random_uuid(), $1, $2, $3, m - interval '30 minutes', m + interval '30 minutes' FROM midnight
+    RETURNING id`, [alice.sub, fixture.p5, fixture.analysis5])).rows[0].id, { commit: true });
+  const today = (await call(alice, 'GET', '/time-entries/today')).body.map((e) => e.id);
+  assert.ok(!today.includes(crossing), 'rattachée à la veille, pas à aujourd’hui');
+});
+await check('arrêter : 200 avec l’heure de fin ; s’il n’y a plus de Chronomètre : 404 AUCUN_CHRONO_ACTIF', async () => {
+  const r = await call(alice, 'POST', '/time-entries/timer/stop');
+  assert.equal(r.status, 200);
+  assert.ok(r.body.endedAt);
+  assert.deepEqual((await call(alice, 'GET', '/time-entries/timer')).body, { timer: null });
+  const again = await call(alice, 'POST', '/time-entries/timer/stop');
+  assert.equal(again.status, 404);
+  assert.deepEqual(again.body, { code: 'AUCUN_CHRONO_ACTIF', message: 'Aucun chronomètre actif' });
+});
+await check('l’Imputation d’un autre Utilisateur répond 404 IMPUTATION_INTROUVABLE et reste en place', async () => {
+  const r = await call(bruno, 'DELETE', `/time-entries/${fixture.first.id}`);
+  assert.equal(r.status, 404);
+  assert.deepEqual(r.body, { code: 'IMPUTATION_INTROUVABLE', message: 'Imputation introuvable' });
+  assert.equal((await query(diane, `SELECT 1 FROM time_entry WHERE id = $1`, [fixture.first.id])).rowCount, 1);
+  assert.equal((await call(alice, 'DELETE', '/time-entries/pas-un-uuid')).body.code, 'IMPUTATION_INTROUVABLE');
+});
+await check('alice supprime sa propre Imputation, sans confirmation : 204, puis 404', async () => {
+  assert.equal((await call(alice, 'DELETE', `/time-entries/${fixture.first.id}`)).status, 204);
+  assert.equal((await call(alice, 'DELETE', `/time-entries/${fixture.first.id}`)).body.code, 'IMPUTATION_INTROUVABLE');
+});
+await check('l’Administrateur passe les deux barrières : il modifie (en base) et supprime (par l’API) l’Imputation d’autrui', async () => {
+  const [brunoTimer] = await runningOf(bruno);
+  assert.equal((await query(diane, `UPDATE time_entry SET ended_at = now() WHERE id = $1`, [brunoTimer])).rowCount, 1);
+  assert.equal((await call(diane, 'DELETE', `/time-entries/${brunoTimer}`)).status, 204);
+  assert.deepEqual(await runningOf(bruno), []);
+});
+await check('en base, un seul Chronomètre par Utilisateur, Administrateur compris', async () => {
+  await assert.rejects(
+    query(diane, `INSERT INTO time_entry (id, user_id, project_id, activity_id, started_at) VALUES (gen_random_uuid(), $1, $2, $3, now())`,
+      [diane.sub, fixture.p6, fixture.meeting6]),
+    /time_entry_one_running_timer/,
+  );
+});
+await check('bruno, retiré de P5, n’y trouve plus d’Activité par la recherche et ne peut plus y démarrer : 404', async () => {
+  await call(diane, 'DELETE', `/projects/${fixture.p5}/members/${bruno.sub}`);
+  assert.deepEqual(await searchIn(bruno, 'réu', [fixture.p5, fixture.p6]), []);
+  assert.equal((await start(bruno, { projectId: fixture.p5, activityId: fixture.meeting5 })).body.code, 'PROJET_INTROUVABLE');
+});
+// Fin de section : Imputations et Chronomètres partent avec les Projets.
+await call(diane, 'DELETE', `/projects/${fixture.p5}`);
+await call(diane, 'DELETE', `/projects/${fixture.p6}`);
+
 // alice ne reste affectée qu'à P1 pour les contrôles suivants.
 await call(diane, 'DELETE', `/projects/${p4}/members/${alice.sub}`);
 
@@ -617,7 +778,7 @@ console.log('\nNettoyage');
 await check('suppression des Projets et Utilisateurs de test', async () => {
   await inDb(diane, async (q) => {
     await q(`DELETE FROM app_user WHERE id = $1`, [`test-cascade-${RUN}`]);
-    await q(`DELETE FROM project WHERE id = ANY($1) OR name = $2`, [[data.p1, data.p2, p3, p4].filter(Boolean), 'L'.repeat(1000)]);
+    await q(`DELETE FROM project WHERE id = ANY($1) OR name = $2`, [[data.p1, data.p2, p3, p4, fixture.p5, fixture.p6].filter(Boolean), 'L'.repeat(1000)]);
   }, { commit: true });
 });
 

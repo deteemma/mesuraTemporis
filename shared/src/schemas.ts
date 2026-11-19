@@ -50,6 +50,54 @@ export interface ActivityImpactDto {
   timeEntries: number;
 }
 
+/** Paire « Activité — Projet » renvoyée par la recherche combinée (ADR-0014). */
+export interface ActivitySearchResultDto {
+  id: string;
+  name: string;
+  projectId: string;
+  projectName: string;
+}
+
+/**
+ * Démarrage d'un Chronomètre : sur une Activité existante du Projet, ou sur un
+ * nouveau nom (l'Activité de même nom normalisé est réutilisée, sinon créée).
+ * Sans l'un ni l'autre, l'API répond 404 `ACTIVITE_INTROUVABLE` (la source échouait
+ * alors en erreur interne).
+ */
+export const startTimerSchema = z.object({
+  projectId: z.string(code('PROJET_INTROUVABLE')),
+  activityId: z.string(code('ACTIVITE_INTROUVABLE')).optional(),
+  newActivityName: activityNameSchema.optional(),
+});
+export type StartTimerInput = z.infer<typeof startTimerSchema>;
+
+/**
+ * Imputation telle que renvoyée par l'API, avec les noms de son Projet et de
+ * son Activité (toujours lisibles par son Auteur, même retiré du Projet).
+ * `endedAt` vide : c'est le Chronomètre.
+ */
+export interface TimeEntryDto {
+  id: string;
+  userId: string;
+  projectId: string;
+  projectName: string;
+  activityId: string;
+  activityName: string;
+  startedAt: string;
+  endedAt: string | null;
+}
+
+/** État du Chronomètre de l'Utilisateur courant. */
+export interface TimerStatusDto {
+  timer: TimeEntryDto | null;
+}
+
+/** Chronomètre démarré, et le précédent qu'il a arrêté dans la même transaction. */
+export interface StartedTimerDto {
+  timer: TimeEntryDto;
+  previousTimerStopped: TimeEntryDto | null;
+}
+
 /** Utilisateur tel que proposé à l'affectation et listé dans une équipe (par Login). */
 export interface UserSummaryDto {
   id: string;

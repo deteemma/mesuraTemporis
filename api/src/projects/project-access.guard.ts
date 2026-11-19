@@ -18,7 +18,8 @@ const PROJECT_ACTION = 'projectAction';
 const uuid = z.uuid();
 
 /**
- * Exige l'accès au Projet `:projectId` pour l'action donnée (règles dans
+ * Exige l'accès au Projet `:projectId` (ou, à défaut, `projectId` du corps de
+ * la requête, comme au démarrage du Chronomètre) pour l'action donnée (règles dans
  * @app/shared). Un non-affecté reçoit 404 `PROJET_INTROUVABLE` : l'existence
  * du Projet ne lui est pas révélée ; un non-Administrateur qui tente une
  * action d'administration reçoit 403 `ACCES_REFUSE`. Première barrière ; la RLS
@@ -36,8 +37,10 @@ export class ProjectAccessGuard implements CanActivate {
 
   async canActivate(ctx: ExecutionContext): Promise<boolean> {
     const action = this.reflector.get<ProjectAction>(PROJECT_ACTION, ctx.getHandler());
-    const request = ctx.switchToHttp().getRequest<FastifyRequest<{ Params: { projectId?: string } }>>();
-    const projectId = request.params.projectId;
+    const request = ctx
+      .switchToHttp()
+      .getRequest<FastifyRequest<{ Params: { projectId?: string }; Body: { projectId?: unknown } | undefined }>>();
+    const projectId = request.params.projectId ?? request.body?.projectId;
     const user = request.user;
     if (!user) throw accessDenied();
     // Une opération d'administration refuse le non-Administrateur (403) avant

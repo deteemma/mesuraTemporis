@@ -3,10 +3,12 @@ import { Injectable } from '@nestjs/common';
 import {
   normalizeName,
   type ActivityDto,
+  type ActivitySearchResultDto,
   type ActivityImpactDto,
   type CreateActivityInput,
   type RenameActivityInput,
 } from '@app/shared';
+import { sql } from 'kysely';
 import { z } from 'zod';
 import type { AuthenticatedUser } from '../auth/authenticated-user.js';
 import { DatabaseService, type Tx } from '../db/database.service.js';
@@ -38,6 +40,37 @@ export class ActivitiesService {
         .orderBy('id')
         .execute()
         .then((rows) => rows.map(toDto));
+    });
+  }
+
+  /**
+   * Recherche combinée (ADR-0014) : paires « Activité — Projet » dont le nom
+   * normalisé contient le texte normalisé (préfixe ou sous-chaîne, casse et
+   * accents ignorés), une ligne par Projet. Porte sur les Projets affectés (tous
+   * pour l'Administrateur). Filtrée sur l'affectation ici, pas seulement par la
+   * RLS : un Projet quitté resterait visible en base par ses Imputations (#11).
+   */
+  search(user: AuthenticatedUser, text: string): Promise<ActivitySearchResultDto[]> {
+    const normalized = normalizeName(text);
+    return this.database.asUser(user, async (tx) => {
+      let query = tx
+        .selectFrom('activity as a')
+        .innerJoin('project as p', 'p.id', 'a.project_id')
+        .select(['a.id', 'a.name', 'a.project_id', 'p.name as project_name'])
+        .where(sql<boolean>`position(${normalized} in a.normalized_name) > 0`);
+      if (!user.isAdmin) {
+        query = query.where((eb) =>
+          eb.exists(
+            eb
+              .selectFrom('project_member as m')
+              .select('m.project_id')
+              .whereRef('m.project_id', '=', 'a.project_id')
+              .where('m.user_id', '=', user.id),
+          ),
+        );
+      }
+      const rows = await query.orderBy('p.name').orderBy('a.created_at').orderBy('a.id').execute();
+      return rows.map((row) => ({ id: row.id, name: row.name, projectId: row.project_id, projectName: row.project_name }));
     });
   }
 

@@ -19,3 +19,5 @@ export const projectNotFound = () => new BusinessError(HttpStatus.NOT_FOUND, 'PR
 export const userNotFound = () => new BusinessError(HttpStatus.NOT_FOUND, 'UTILISATEUR_INTROUVABLE');
 export const activityNotFound = () => new BusinessError(HttpStatus.NOT_FOUND, 'ACTIVITE_INTROUVABLE');
 export const activityNameDuplicate = () => new BusinessError(HttpStatus.CONFLICT, 'ACTIVITE_NOM_DUPLIQUE');
+export const timeEntryNotFound = () => new BusinessError(HttpStatus.NOT_FOUND, 'IMPUTATION_INTROUVABLE');
+export const noActiveTimer = () => new BusinessError(HttpStatus.NOT_FOUND, 'AUCUN_CHRONO_ACTIF');
