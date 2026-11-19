@@ -1,16 +1,21 @@
 // Écran « Saisie de temps » : Chronomètre, recherche combinée Activité→Projet
-// (ADR-0014) et Imputations de la Journée (ADR-0012), repris de la source et de
-// l'ébauche de la branche prototype/saisie-temps. L'Édition à la volée, Relancer,
-// le renommage, la Saisie manuelle et l'historique relèvent de leurs propres tickets.
+// (ADR-0014), Imputations de la Journée (ADR-0012) avec Édition à la volée et
+// Scission (ADR-0013), Relancer et renommage sur place (ADR-0015), repris de la
+// source et de l'ébauche de la branche prototype/saisie-temps. La Saisie
+// manuelle et l'historique relèvent de leurs propres tickets.
 import {
+  type ActivityDto,
   type ActivityFieldAction,
   type ActivityFieldState,
   type ActivitySearchResultDto,
+  type EditedTimeEntryDto,
   type ProjectSummaryDto,
   type StartedTimerDto,
   type SuggestionContext,
   type TimeEntryDto,
+  type TimeInput,
   type TimerStatusDto,
+  dayOf,
   durationSeconds,
   formatSeconds,
   formatTimeOfDay,
@@ -18,11 +23,14 @@ import {
   initialActivityFieldState,
   recentPairs,
   reduceActivityField,
+  zurichInstant,
 } from '@app/shared';
-import { useCallback, useEffect, useMemo, useState } from 'react';
-import { request } from '../api';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { ActivityNameField } from '../ActivityNameField';
+import { ApiError, request } from '../api';
 import { useLanguage } from '../i18n/i18n';
 import { useNotify, useNotifyError } from '../notifications';
+import { TimeField, type TimeFieldHandle } from '../TimeField';
 
 const COUNTER_INTERVAL_MS = 1000;
 
@@ -136,6 +144,69 @@ export function TimeEntryPage() {
     reload();
   }
 
+  // Relancer : un Chronomètre démarre aujourd'hui sur le même Projet et la même
+  // Activité ; l'Imputation d'origine reste inchangée, le Chronomètre en cours est arrêté.
+  async function relaunch(entry: TimeEntryDto) {
+    try {
+      const started = await request<StartedTimerDto>('/time-entries/timer/start', {
+        method: 'POST',
+        body: JSON.stringify({ projectId: entry.projectId, activityId: entry.activityId }),
+      });
+      const previous = started.previousTimerStopped;
+      if (previous?.endedAt) notify(t('NOTIF_CHRONO_PRECEDENT_ARRETE', { heure: formatTimeOfDay(previous.endedAt) }));
+    } catch (error) {
+      notifyError(error);
+    }
+    reload();
+  }
+
+  // Rien à relancer sur la ligne dont le Projet et l'Activité sont ceux du Chronomètre en cours.
+  const isRunning = (entry: TimeEntryDto) =>
+    !!timer && timer.projectId === entry.projectId && timer.activityId === entry.activityId;
+
+  /** Message d'un refus à afficher sur place : son Code d'erreur traduit, sinon `fallback`. */
+  const refusalMessage = (error: unknown, fallback: string) =>
+    error instanceof ApiError && error.code ? t(error.code) : t(fallback);
+
+  // Édition à la volée : l'heure saisie est placée sur la Journée de la valeur
+  // éditée (heure suisse) ; une Scission éventuelle est seulement signalée.
+  async function editTime(entry: TimeEntryDto, field: 'startedAt' | 'endedAt', time: TimeInput): Promise<string | null> {
+    const reference = entry[field] ?? entry.startedAt;
+    const instant = zurichInstant(dayOf(reference), time.hours, time.minutes).toISOString();
+    try {
+      const edited = await request<EditedTimeEntryDto>(`/time-entries/${entry.id}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ [field]: instant }),
+      });
+      if (edited.split) notify(t('NOTIF_SCISSION', { jour: dayOf(edited.split.startedAt) }));
+      reload();
+      return null;
+    } catch (error) {
+      if (error instanceof ApiError && error.status === 401) return null;
+      return refusalMessage(error, 'ERREUR_MODIFICATION_NON_ENREGISTREE');
+    }
+  }
+
+  // Renommage sur place : le nouveau nom s'applique à toutes les Imputations de
+  // l'Activité. Un Projet quitté entre-temps est signalé en notification (E10).
+  async function rename(projectId: string, activityId: string, name: string): Promise<string | null> {
+    try {
+      await request<ActivityDto>(`/projects/${projectId}/activities/${activityId}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ name }),
+      });
+      reload();
+      return null;
+    } catch (error) {
+      if (error instanceof ApiError && error.status === 401) return null;
+      if (error instanceof ApiError && error.code === 'PROJET_INTROUVABLE') {
+        notifyError(error);
+        return null;
+      }
+      return refusalMessage(error, 'ERREUR_RENOMMAGE_NON_ENREGISTRE');
+    }
+  }
+
   async function remove(id: string) {
     try {
       await request<void>(`/time-entries/${id}`, { method: 'DELETE' });
@@ -165,7 +236,14 @@ export function TimeEntryPage() {
           <div className="hero__actif">
             <span className="hero__pulse"></span>
             <div className="hero__texte">
-              <div className="hero__titre">{timer.activityName}</div>
+              <div className="hero__titre">
+                <ActivityNameField
+                  name={timer.activityName}
+                  className="hero__titre-editable"
+                  errorClassName="hero__erreur"
+                  onRename={(name) => rename(timer.projectId, timer.activityId, name)}
+                />
+              </div>
               <div className="hero__sous-titre">
                 {timer.projectName} · {t('SAISIE_EN_COURS_DEPUIS')} {formatTimeOfDay(timer.startedAt)} ·{' '}
                 <span className="hero__compteur">{counter}</span>
@@ -260,7 +338,12 @@ export function TimeEntryPage() {
                     <span className={`groupe__chevron${open ? ' groupe__chevron--ouvert' : ''}`}>▸</span>
                   </button>
                   <div className="groupe__info">
-                    <span className="groupe__activite">{group.entries[0]!.activityName}</span>
+                    <ActivityNameField
+                      name={group.entries[0]!.activityName}
+                      className="groupe__activite"
+                      errorClassName="entries__erreur"
+                      onRename={(name) => rename(group.entries[0]!.projectId, group.entries[0]!.activityId, name)}
+                    />
                     <span className="groupe__projet">{group.entries[0]!.projectName}</span>
                   </div>
                   <span className="groupe__nombre">({group.entries.length})</span>
@@ -269,25 +352,14 @@ export function TimeEntryPage() {
                 {open && (
                   <ul className="entries__liste">
                     {group.entries.map((entry) => (
-                      <li className="entries__ligne" key={entry.id}>
-                        <span className="entries__puce"></span>
-                        <div className="entries__info">
-                          <span className="entries__activite">{entry.activityName}</span>
-                          <span className="entries__projet">{entry.projectName}</span>
-                        </div>
-                        <span className="entries__horaire">
-                          {formatTimeOfDay(entry.startedAt)} → {formatTimeOfDay(entry.endedAt!)}
-                        </span>
-                        <span className="badge">{formatSeconds(durationSeconds(entry.startedAt, entry.endedAt!))}</span>
-                        <button
-                          type="button"
-                          className="btn btn-danger entries__supprimer"
-                          aria-label={t('ARIA_SUPPRIMER_IMPUTATION')}
-                          onClick={() => void remove(entry.id)}
-                        >
-                          ✕
-                        </button>
-                      </li>
+                      <EntryLine
+                        key={entry.id}
+                        entry={entry}
+                        running={isRunning(entry)}
+                        onEditTime={(field, time) => editTime(entry, field, time)}
+                        onRelaunch={() => void relaunch(entry)}
+                        onRemove={() => void remove(entry.id)}
+                      />
                     ))}
                   </ul>
                 )}
@@ -297,5 +369,59 @@ export function TimeEntryPage() {
         </ul>
       </section>
     </div>
+  );
+}
+
+interface EntryLineProps {
+  entry: TimeEntryDto;
+  running: boolean;
+  onEditTime: (field: 'startedAt' | 'endedAt', time: TimeInput) => Promise<string | null>;
+  onRelaunch: () => void;
+  onRemove: () => void;
+}
+
+/** Ligne d'une Imputation terminée : heures éditables sur place, Relancer, supprimer. */
+function EntryLine({ entry, running, onEditTime, onRelaunch, onRemove }: EntryLineProps) {
+  const { t } = useLanguage();
+  const endField = useRef<TimeFieldHandle>(null);
+  return (
+    <li className="entries__ligne">
+      <span className="entries__puce"></span>
+      <div className="entries__info">
+        <span className="entries__activite">{entry.activityName}</span>
+        <span className="entries__projet">{entry.projectName}</span>
+      </div>
+      <span className="entries__horaire">
+        <TimeField
+          value={formatTimeOfDay(entry.startedAt)}
+          ariaLabel={t('ARIA_MODIFIER_HEURE_DEBUT')}
+          onValidate={(time, viaEnter) => {
+            // Entrée sur le début enchaîne sur la fin, comme dans la source.
+            if (viaEnter) endField.current?.open();
+            return onEditTime('startedAt', time);
+          }}
+        />{' '}
+        →{' '}
+        <TimeField
+          ref={endField}
+          value={formatTimeOfDay(entry.endedAt!)}
+          ariaLabel={t('ARIA_MODIFIER_HEURE_FIN')}
+          onValidate={(time) => onEditTime('endedAt', time)}
+        />
+      </span>
+      <span className="badge">{formatSeconds(durationSeconds(entry.startedAt, entry.endedAt!))}</span>
+      <button
+        type="button"
+        className="btn btn-secondary entries__relancer"
+        disabled={running}
+        aria-label={t('ARIA_RELANCER')}
+        onClick={onRelaunch}
+      >
+        {t('BOUTON_RELANCER')}
+      </button>
+      <button type="button" className="btn btn-danger entries__supprimer" aria-label={t('ARIA_SUPPRIMER_IMPUTATION')} onClick={onRemove}>
+        ✕
+      </button>
+    </li>
   );
 }

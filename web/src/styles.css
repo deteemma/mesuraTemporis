@@ -1000,6 +1000,31 @@ select {
   font-size: var(--text-xs);
 }
 
+/* Champ heure 24h de l'Édition à la volée (repris de la source). */
+.champ-heure__lecture {
+  cursor: pointer;
+  border-radius: var(--radius-sm, 4px);
+  padding: 0 2px;
+}
+
+.champ-heure__lecture:hover,
+.champ-heure__lecture:focus-visible {
+  background: var(--color-accent-soft);
+  outline: none;
+}
+
+.champ-heure__saisie {
+  width: 5.5em;
+  padding: 0 4px;
+  font-size: var(--text-sm);
+}
+
+.champ-heure__erreur {
+  color: var(--color-danger);
+  font-size: var(--text-xs);
+  margin-left: var(--space-2);
+}
+
 @media (max-width: 640px) {
   .hero__actif {
     flex-wrap: wrap;

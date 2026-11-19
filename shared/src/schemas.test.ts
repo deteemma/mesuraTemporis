@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { createActivitySchema, createProjectSchema, renameActivitySchema } from './schemas.js';
+import { createActivitySchema, createProjectSchema, inlineEditSchema, renameActivitySchema } from './schemas.js';
 
 const refusal = (input: unknown) => createProjectSchema.safeParse(input).error?.issues[0]?.message;
 
@@ -33,4 +33,17 @@ test('un nom d’Activité absent, vide ou fait d’espaces est refusé avec NOM
     assert.equal(activityRefusal(schema, { name: '' }), 'NOM_REQUIS');
     assert.equal(activityRefusal(schema, { name: '  \t' }), 'NOM_REQUIS');
   }
+});
+
+test('Édition à la volée : début et/ou fin, en instants ISO 8601', () => {
+  assert.deepEqual(inlineEditSchema.parse({ endedAt: '2026-01-05T09:00:00.000Z' }), { endedAt: '2026-01-05T09:00:00.000Z' });
+  assert.deepEqual(
+    inlineEditSchema.parse({ startedAt: '2026-01-05T09:00:00+01:00', endedAt: '2026-01-05T10:00:00+01:00' }),
+    { startedAt: '2026-01-05T09:00:00+01:00', endedAt: '2026-01-05T10:00:00+01:00' },
+  );
+});
+
+test('Édition à la volée : un instant illisible est refusé avec IMPUTATION_CHAMPS_REQUIS', () => {
+  assert.equal(inlineEditSchema.safeParse({ endedAt: '09:00' }).error?.issues[0]?.message, 'IMPUTATION_CHAMPS_REQUIS');
+  assert.equal(inlineEditSchema.safeParse({ startedAt: null }).error?.issues[0]?.message, 'IMPUTATION_CHAMPS_REQUIS');
 });

@@ -21,3 +21,4 @@ export const activityNotFound = () => new BusinessError(HttpStatus.NOT_FOUND, 'A
 export const activityNameDuplicate = () => new BusinessError(HttpStatus.CONFLICT, 'ACTIVITE_NOM_DUPLIQUE');
 export const timeEntryNotFound = () => new BusinessError(HttpStatus.NOT_FOUND, 'IMPUTATION_INTROUVABLE');
 export const noActiveTimer = () => new BusinessError(HttpStatus.NOT_FOUND, 'AUCUN_CHRONO_ACTIF');
+export const endBeforeStart = () => new BusinessError(HttpStatus.BAD_REQUEST, 'IMPUTATION_FIN_AVANT_DEBUT');

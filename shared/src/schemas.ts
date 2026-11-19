@@ -98,6 +98,24 @@ export interface StartedTimerDto {
   previousTimerStopped: TimeEntryDto | null;
 }
 
+const instantSchema = z.iso.datetime({ offset: true, ...code('IMPUTATION_CHAMPS_REQUIS') });
+
+/**
+ * Édition à la volée : le début, la fin, ou les deux (ADR-0013). L'interface
+ * met les secondes à zéro ; l'API ne l'impose pas (#11, note 8).
+ */
+export const inlineEditSchema = z.object({
+  startedAt: instantSchema.optional(),
+  endedAt: instantSchema.optional(),
+});
+export type InlineEditInput = z.infer<typeof inlineEditSchema>;
+
+/** Imputation éditée, et celle que la Scission a créée sur l'autre Journée, s'il y en a une. */
+export interface EditedTimeEntryDto {
+  entry: TimeEntryDto;
+  split: TimeEntryDto | null;
+}
+
 /** Utilisateur tel que proposé à l'affectation et listé dans une équipe (par Login). */
 export interface UserSummaryDto {
   id: string;

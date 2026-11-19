@@ -582,6 +582,147 @@ await check('bruno, retiré de P5, n’y trouve plus d’Activité par la recher
   assert.deepEqual(await searchIn(bruno, 'réu', [fixture.p5, fixture.p6]), []);
   assert.equal((await start(bruno, { projectId: fixture.p5, activityId: fixture.meeting5 })).body.code, 'PROJET_INTROUVABLE');
 });
+
+console.log('\nÉdition à la volée, Scission et Relancer (API et base)');
+// Imputations terminées du 5 janvier 2026, heure de Zurich (UTC+1).
+const entryAt = (user, activityId, startedAt, endedAt) =>
+  inDb(
+    user,
+    async (q) =>
+      (await q(`INSERT INTO time_entry (id, user_id, project_id, activity_id, started_at, ended_at)
+        VALUES (gen_random_uuid(), $1, $2, $3, $4, $5) RETURNING id`, [user.sub, fixture.p5, activityId, startedAt, endedAt])).rows[0].id,
+    { commit: true },
+  );
+const nineToTen = (user) => entryAt(user, fixture.meeting5, '2026-01-05T08:00:00Z', '2026-01-05T09:00:00Z'); // 09:00 → 10:00
+const edit = (user, id, body) => call(user, 'PATCH', `/time-entries/${id}`, body);
+const rangeOf = async (id) => {
+  const row = (await query(diane, `SELECT started_at, ended_at FROM time_entry WHERE id = $1`, [id])).rows[0];
+  return row && [row.started_at.toISOString(), row.ended_at.toISOString()];
+};
+const countOf = async (user) =>
+  Number((await query(diane, `SELECT count(*) FROM time_entry WHERE user_id = $1 AND project_id = $2`, [user.sub, fixture.p5])).rows[0].count);
+
+await check('une édition sans franchissement de minuit est une modification simple, sans Scission', async () => {
+  const id = await nineToTen(alice);
+  const r = await edit(alice, id, { endedAt: '2026-01-05T10:30:00.000Z' }); // fin à 11:30
+  assert.equal(r.status, 200);
+  assert.equal(r.body.entry.endedAt, '2026-01-05T10:30:00.000Z');
+  assert.equal(r.body.split, null);
+});
+await check('fin éditée avant le début : Scission vers le lendemain, sur les minuits suisses', async () => {
+  const id = await nineToTen(alice);
+  const r = await edit(alice, id, { endedAt: '2026-01-05T07:00:00.000Z' }); // fin à 08:00
+  assert.equal(r.status, 200);
+  assert.deepEqual([r.body.entry.startedAt, r.body.entry.endedAt], ['2026-01-05T08:00:00.000Z', '2026-01-05T22:59:59.999Z']);
+  const { split } = r.body;
+  assert.deepEqual([split.startedAt, split.endedAt], ['2026-01-05T23:00:00.000Z', '2026-01-06T07:00:00.000Z']);
+  assert.deepEqual([split.userId, split.projectId, split.activityId], [alice.sub, fixture.p5, fixture.meeting5]);
+  assert.deepEqual(await rangeOf(split.id), ['2026-01-05T23:00:00.000Z', '2026-01-06T07:00:00.000Z']);
+});
+await check('début édité après la fin : Scission vers la veille, l’original commence à minuit', async () => {
+  const id = await nineToTen(alice);
+  const r = await edit(alice, id, { startedAt: '2026-01-05T22:50:00.000Z' }); // début à 23:50
+  assert.equal(r.status, 200);
+  assert.deepEqual([r.body.entry.startedAt, r.body.entry.endedAt], ['2026-01-04T23:00:00.000Z', '2026-01-05T09:00:00.000Z']);
+  assert.deepEqual([r.body.split.startedAt, r.body.split.endedAt], ['2026-01-04T22:50:00.000Z', '2026-01-04T22:59:59.999Z']);
+});
+await check('début et fin envoyés ensemble et inversés : 400 IMPUTATION_FIN_AVANT_DEBUT, rien ne change', async () => {
+  const id = await nineToTen(alice);
+  const before = await countOf(alice);
+  const r = await edit(alice, id, { startedAt: '2026-01-05T22:50:00.000Z', endedAt: '2026-01-05T08:30:00.000Z' });
+  assert.equal(r.status, 400);
+  assert.equal(r.body.code, 'IMPUTATION_FIN_AVANT_DEBUT');
+  assert.deepEqual(await rangeOf(id), ['2026-01-05T08:00:00.000Z', '2026-01-05T09:00:00.000Z']);
+  assert.equal(await countOf(alice), before);
+});
+await check('instant illisible : 400 IMPUTATION_CHAMPS_REQUIS', async () => {
+  const id = await nineToTen(alice);
+  assert.equal((await edit(alice, id, { endedAt: '08:00' })).body.code, 'IMPUTATION_CHAMPS_REQUIS');
+});
+await check('l’Imputation d’autrui : 404 IMPUTATION_INTROUVABLE, ni modification ni Scission', async () => {
+  const id = await nineToTen(alice);
+  const before = await countOf(alice);
+  const r = await edit(bruno, id, { endedAt: '2026-01-05T07:00:00.000Z' });
+  assert.equal(r.status, 404);
+  assert.equal(r.body.code, 'IMPUTATION_INTROUVABLE');
+  assert.deepEqual(await rangeOf(id), ['2026-01-05T08:00:00.000Z', '2026-01-05T09:00:00.000Z']);
+  assert.equal(await countOf(alice), before);
+  assert.equal((await edit(alice, 'pas-un-uuid', { endedAt: '2026-01-05T07:00:00.000Z' })).body.code, 'IMPUTATION_INTROUVABLE');
+});
+await check('diane (Administrateur, non affectée) scinde l’Imputation d’alice : la nouvelle est à alice', async () => {
+  const id = await nineToTen(alice);
+  const r = await edit(diane, id, { endedAt: '2026-01-05T07:00:00.000Z' });
+  assert.equal(r.status, 200);
+  assert.equal(r.body.split.userId, alice.sub);
+});
+await check('un Auteur retiré du Projet édite et scinde encore ses Imputations ; Relancer lui répond 404', async () => {
+  await call(diane, 'PUT', `/projects/${fixture.p5}/members/${chloe.sub}`);
+  const id = await nineToTen(chloe);
+  await call(diane, 'DELETE', `/projects/${fixture.p5}/members/${chloe.sub}`);
+  const r = await edit(chloe, id, { endedAt: '2026-01-05T07:00:00.000Z' });
+  assert.equal(r.status, 200);
+  assert.equal(r.body.split.userId, chloe.sub);
+  const relaunch = await start(chloe, { projectId: fixture.p5, activityId: fixture.meeting5 });
+  assert.equal(relaunch.status, 404);
+  assert.equal(relaunch.body.code, 'PROJET_INTROUVABLE');
+});
+await check('en base, la Scission n’est qu’une coupe à minuit, sur une Imputation que l’on peut modifier', async () => {
+  const id = await nineToTen(alice);
+  const split = (user, args) => query(user, `SELECT split_time_entry($1, $2, $3, gen_random_uuid(), $4, $5)`, [id, ...args]);
+  // Coupe ailleurs qu'à minuit : refusée (pas de création libre par ce biais).
+  await assert.rejects(
+    split(alice, ['2026-01-05T08:00:00Z', '2026-01-05T08:30:00Z', '2026-01-05T08:30:00.001Z', '2026-01-05T09:00:00Z']),
+    /pas une Scission à minuit/,
+  );
+  // Vers la veille, mais depuis un minuit antérieur à la Journée de l'original : refusée.
+  await assert.rejects(
+    split(alice, ['2025-12-31T23:00:00Z', '2026-01-05T09:00:00Z', '2025-12-31T22:00:00Z', '2025-12-31T22:59:59.999Z']),
+    /pas une Scission à minuit/,
+  );
+  // Imputation d'autrui : introuvable.
+  await assert.rejects(
+    split(bruno, ['2026-01-05T08:00:00Z', '2026-01-05T22:59:59.999Z', '2026-01-05T23:00:00Z', '2026-01-06T07:00:00Z']),
+    /introuvable/,
+  );
+  assert.deepEqual(await rangeOf(id), ['2026-01-05T08:00:00.000Z', '2026-01-05T09:00:00.000Z']);
+});
+await check('en base, la Scission est atomique : si la création échoue, l’original n’est pas tronqué', async () => {
+  const id = await nineToTen(alice);
+  const before = await countOf(alice);
+  // L'identifiant de la nouvelle Imputation est déjà pris : l'insertion échoue après la troncature.
+  await assert.rejects(
+    query(alice, `SELECT split_time_entry($1, $2, $3, $1, $4, $5)`,
+      [id, '2026-01-05T08:00:00Z', '2026-01-05T22:59:59.999Z', '2026-01-05T23:00:00Z', '2026-01-06T07:00:00Z']),
+    /time_entry_pkey/,
+  );
+  assert.deepEqual(await rangeOf(id), ['2026-01-05T08:00:00.000Z', '2026-01-05T09:00:00.000Z']);
+  assert.equal(await countOf(alice), before);
+});
+await check('Relancer : nouveau Chronomètre aujourd’hui sur le même Projet et la même Activité, le précédent arrêté, l’origine inchangée', async () => {
+  const id = await nineToTen(alice);
+  const running = (await start(alice, { projectId: fixture.p5, activityId: fixture.analysis5 })).body.timer;
+  const r = await start(alice, { projectId: fixture.p5, activityId: fixture.meeting5 });
+  assert.equal(r.status, 201);
+  assert.deepEqual([r.body.timer.projectId, r.body.timer.activityId, r.body.timer.endedAt], [fixture.p5, fixture.meeting5, null]);
+  assert.ok(Date.now() - new Date(r.body.timer.startedAt).getTime() < 60_000, 'démarré maintenant');
+  assert.equal(r.body.previousTimerStopped.id, running.id);
+  assert.deepEqual(await runningOf(alice), [r.body.timer.id]);
+  assert.deepEqual(await rangeOf(id), ['2026-01-05T08:00:00.000Z', '2026-01-05T09:00:00.000Z']);
+  await call(alice, 'POST', '/time-entries/timer/stop');
+});
+await check('renommer sur place s’applique à toutes les Imputations de l’Activité', async () => {
+  const r = await call(alice, 'PATCH', `/projects/${fixture.p5}/activities/${fixture.meeting5}`, { name: 'Réunion d’équipe' });
+  assert.equal(r.status, 200);
+  const names = (await call(alice, 'GET', '/time-entries/today')).body
+    .filter((e) => e.activityId === fixture.meeting5)
+    .map((e) => e.activityName);
+  assert.ok(names.length > 0);
+  assert.ok(names.every((n) => n === 'Réunion d’équipe'));
+  const duplicate = await call(alice, 'PATCH', `/projects/${fixture.p5}/activities/${fixture.meeting5}`, { name: 'ANALYSE' });
+  assert.equal(duplicate.status, 409);
+  assert.equal(duplicate.body.code, 'ACTIVITE_NOM_DUPLIQUE');
+});
+
 // Fin de section : Imputations et Chronomètres partent avec les Projets.
 await call(diane, 'DELETE', `/projects/${fixture.p5}`);
 await call(diane, 'DELETE', `/projects/${fixture.p6}`);

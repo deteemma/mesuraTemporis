@@ -4,6 +4,9 @@ import {
   currentDay,
   dayBounds,
   normalizeName,
+  planInlineEdit,
+  type EditedTimeEntryDto,
+  type InlineEditInput,
   type StartTimerInput,
   type StartedTimerDto,
   type TimeEntryDto,
@@ -13,7 +16,13 @@ import { sql } from 'kysely';
 import { z } from 'zod';
 import type { AuthenticatedUser } from '../auth/authenticated-user.js';
 import { DatabaseService, type Tx } from '../db/database.service.js';
-import { activityNotFound, noActiveTimer, projectNotFound, timeEntryNotFound } from '../errors.js';
+import {
+  activityNotFound,
+  endBeforeStart,
+  noActiveTimer,
+  projectNotFound,
+  timeEntryNotFound,
+} from '../errors.js';
 
 const uuid = z.uuid();
 
@@ -96,6 +105,54 @@ export class TimeEntriesService {
         .orderBy('e.id')
         .execute();
       return rows.map(toDto);
+    });
+  }
+
+  /**
+   * Édition à la volée du début et/ou de la fin : l'Auteur la sienne, quelle que
+   * soit son affectation ; l'Administrateur toutes (sinon 404). Une édition qui
+   * ferait franchir minuit déclenche la Scission (ADR-0013) : l'original tronqué
+   * et la nouvelle Imputation sont écrits dans la même transaction.
+   */
+  edit(user: AuthenticatedUser, id: string, input: InlineEditInput): Promise<EditedTimeEntryDto> {
+    if (!uuid.safeParse(id).success) return Promise.reject(timeEntryNotFound());
+    return this.database.asUser(user, async (tx) => {
+      const current = await tx
+        .selectFrom('time_entry')
+        .select(['started_at', 'ended_at'])
+        .where('id', '=', id)
+        .forUpdate()
+        .executeTakeFirst();
+      if (!current) throw timeEntryNotFound();
+
+      const plan = planInlineEdit(
+        { startedAt: current.started_at, endedAt: current.ended_at },
+        {
+          startedAt: input.startedAt !== undefined ? new Date(input.startedAt) : undefined,
+          endedAt: input.endedAt !== undefined ? new Date(input.endedAt) : undefined,
+        },
+      );
+
+      if (plan.kind === 'refused') throw endBeforeStart();
+
+      if (plan.kind === 'update') {
+        await tx
+          .updateTable('time_entry')
+          .set({ started_at: plan.entry.startedAt, ended_at: plan.entry.endedAt })
+          .where('id', '=', id)
+          .execute();
+        return { entry: toDto(await selectEntries(tx).where('e.id', '=', id).executeTakeFirstOrThrow()), split: null };
+      }
+
+      // La création passe par la base, qui n'accepte qu'une Scission à minuit (migration 0002).
+      const splitId = randomUUID();
+      await sql`SELECT split_time_entry(${id}::uuid, ${plan.original.startedAt}, ${plan.original.endedAt},
+        ${splitId}::uuid, ${plan.created.startedAt}, ${plan.created.endedAt})`.execute(tx);
+      const [entry, split] = await Promise.all([
+        selectEntries(tx).where('e.id', '=', id).executeTakeFirstOrThrow(),
+        selectEntries(tx).where('e.id', '=', splitId).executeTakeFirstOrThrow(),
+      ]);
+      return { entry: toDto(entry), split: toDto(split) };
     });
   }
 
