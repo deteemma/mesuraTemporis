@@ -15,14 +15,16 @@ import {
   type TimeEntryDto,
   type TimeInput,
   type TimerStatusDto,
+  type Day,
   dayOf,
   durationSeconds,
   formatSeconds,
   formatTimeOfDay,
   groupByActivity,
   initialActivityFieldState,
-  parseLocalDateTime,
+  parseDateInput,
   recentPairs,
+  parseTimeInput,
   reduceActivityField,
   zurichInstant,
 } from '@app/shared';
@@ -218,7 +220,7 @@ export function TimeEntryPage() {
   }
 
   // --- Saisie manuelle ---
-  const [manual, setManual] = useState({ projectId: '', activityId: '', start: '', end: '' });
+  const [manual, setManual] = useState({ projectId: '', activityId: '', startDate: '', startTime: '', endDate: '', endTime: '' });
   const [manualActivities, setManualActivities] = useState<ActivityDto[]>([]);
   const [manualError, setManualError] = useState<string | null>(null);
 
@@ -234,23 +236,34 @@ export function TimeEntryPage() {
     };
   }, [manual.projectId, notifyError]);
 
-  // Comme dans la source, un formulaire incomplet n'est pas envoyé. Les heures
-  // saisies sont celles de Zurich (ADR-0012) ; une saisie qui franchit minuit
-  // est acceptée telle quelle. Un refus s'affiche en bandeau sous le formulaire (E3).
+  // Comme dans la source, un formulaire incomplet n'est pas envoyé. Dates
+  // jj.mm.aaaa et heures 24 h saisies au clavier (ADR-0022), lues en heure de
+  // Zurich (ADR-0012) ; une saisie qui franchit minuit est acceptée telle quelle.
+  // Une date ou une heure illisible, comme un refus du serveur, s'affiche en
+  // bandeau sous le formulaire (E3).
   async function addManual(event: FormEvent) {
     event.preventDefault();
-    if (!manual.projectId || !manual.activityId || !manual.start || !manual.end) return;
+    const { projectId, activityId, startDate, startTime, endDate, endTime } = manual;
+    if (!projectId || !activityId || !startDate || !startTime || !endDate || !endTime) return;
+    const startDay = parseDateInput(startDate);
+    const endDay = parseDateInput(endDate);
+    if (!startDay || !endDay) {
+      setManualError(t('CHAMP_DATE_ERREUR_INVALIDE'));
+      return;
+    }
+    const start = parseTimeInput(startTime);
+    const end = parseTimeInput(endTime);
+    if (!start || !end) {
+      setManualError(t('CHAMP_HEURE_ERREUR_INVALIDE'));
+      return;
+    }
+    const instant = (day: Day, time: TimeInput) => zurichInstant(day, time.hours, time.minutes).toISOString();
     try {
       await request<TimeEntryDto>('/time-entries', {
         method: 'POST',
-        body: JSON.stringify({
-          projectId: manual.projectId,
-          activityId: manual.activityId,
-          startedAt: parseLocalDateTime(manual.start)?.toISOString(),
-          endedAt: parseLocalDateTime(manual.end)?.toISOString(),
-        }),
+        body: JSON.stringify({ projectId, activityId, startedAt: instant(startDay, start), endedAt: instant(endDay, end) }),
       });
-      setManual((current) => ({ ...current, start: '', end: '' }));
+      setManual((current) => ({ ...current, startDate: '', startTime: '', endDate: '', endTime: '' }));
       setManualError(null);
       reload();
     } catch (error) {
@@ -258,6 +271,8 @@ export function TimeEntryPage() {
       setManualError(refusalMessage(error, 'ERREUR_MODIFICATION_NON_ENREGISTREE'));
     }
   }
+  const setManualField = (field: keyof typeof manual) => (event: { target: { value: string } }) =>
+    setManual((current) => ({ ...current, [field]: event.target.value }));
 
   // --- Imputations de la Journée, regroupées par Projet et Activité ---
   const groups = useMemo(() => groupByActivity(entries), [entries]);
@@ -382,7 +397,7 @@ export function TimeEntryPage() {
             className="field"
             aria-label={t('CHAMP_ACTIVITE')}
             value={manual.activityId}
-            onChange={(event) => setManual((current) => ({ ...current, activityId: event.target.value }))}
+            onChange={setManualField('activityId')}
           >
             <option value="">{t('CHAMP_ACTIVITE')}</option>
             {manualActivities.map((activity) => (
@@ -391,20 +406,46 @@ export function TimeEntryPage() {
               </option>
             ))}
           </select>
-          <input
-            className="field"
-            type="datetime-local"
-            aria-label={t('CHAMP_HEURE_DEBUT')}
-            value={manual.start}
-            onChange={(event) => setManual((current) => ({ ...current, start: event.target.value }))}
-          />
-          <input
-            className="field"
-            type="datetime-local"
-            aria-label={t('CHAMP_HEURE_FIN')}
-            value={manual.end}
-            onChange={(event) => setManual((current) => ({ ...current, end: event.target.value }))}
-          />
+          <div className="manuel__borne">
+            <input
+              className="field manuel__date"
+              type="text"
+              inputMode="numeric"
+              aria-label={t('CHAMP_DATE_DEBUT')}
+              placeholder={t('CHAMP_DATE_FORMAT')}
+              value={manual.startDate}
+              onChange={setManualField('startDate')}
+            />
+            <input
+              className="field manuel__heure"
+              type="text"
+              inputMode="numeric"
+              aria-label={t('CHAMP_HEURE_DEBUT')}
+              placeholder={t('CHAMP_HEURE_FORMAT')}
+              value={manual.startTime}
+              onChange={setManualField('startTime')}
+            />
+          </div>
+          <div className="manuel__borne">
+            <input
+              className="field manuel__date"
+              type="text"
+              inputMode="numeric"
+              aria-label={t('CHAMP_DATE_FIN')}
+              placeholder={t('CHAMP_DATE_FORMAT')}
+              value={manual.endDate}
+              onChange={setManualField('endDate')}
+            />
+            <input
+              className="field manuel__heure"
+              type="text"
+              inputMode="numeric"
+              aria-label={t('CHAMP_HEURE_FIN')}
+              placeholder={t('CHAMP_HEURE_FORMAT')}
+              value={manual.endTime}
+              onChange={setManualField('endTime')}
+            />
+          </div>
           <button type="submit" className="btn btn-secondary">
             {t('BOUTON_AJOUTER')}
           </button>

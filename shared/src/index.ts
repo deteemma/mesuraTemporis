@@ -8,3 +8,4 @@ export * from './activity-resolution.js';
 export * from './time-entry-groups.js';
 export * from './time-input.js';
 export * from './split.js';
+export * from './date-input.js';

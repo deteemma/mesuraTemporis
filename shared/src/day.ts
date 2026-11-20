@@ -86,19 +86,3 @@ const timeFormat = new Intl.DateTimeFormat('en-GB', {
 export function formatTimeOfDay(instant: Date | string): string {
   return timeFormat.format(new Date(instant));
 }
-
-const LOCAL_DATE_TIME = /^(\d{4}-\d{2}-\d{2})T(\d{2}):(\d{2})$/;
-
-/**
- * Date-heure saisie en Saisie manuelle (AAAA-MM-JJTHH:mm, format du champ
- * date-heure du navigateur), lue comme heure murale de Zurich (ADR-0012).
- * `null` si le texte est vide ou illisible.
- */
-export function parseLocalDateTime(text: string): Date | null {
-  const match = text.match(LOCAL_DATE_TIME);
-  if (!match) return null;
-  const hours = Number(match[2]);
-  const minutes = Number(match[3]);
-  if (hours > 23 || minutes > 59) return null;
-  return zurichInstant(match[1]!, hours, minutes);
-}
