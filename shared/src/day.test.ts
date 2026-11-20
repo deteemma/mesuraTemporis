@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { currentDay, dayBounds, dayOf, formatTimeOfDay, zurichInstant } from './day.js';
+import { currentDay, dayBounds, dayOf, formatTimeOfDay, parseLocalDateTime, zurichInstant } from './day.js';
 
 const HOUR_MS = 3600 * 1000;
 
@@ -74,4 +74,16 @@ test('l’heure affichée (hh:mm, 24 h) est celle de Zurich, quel que soit le fu
   assert.equal(formatTimeOfDay('2026-01-15T08:05:59.000Z'), '09:05');
   assert.equal(formatTimeOfDay('2026-07-15T22:30:00.000Z'), '00:30');
   assert.equal(formatTimeOfDay('2026-07-15T11:00:00.000Z'), '13:00');
+});
+
+test('Saisie manuelle : la date-heure saisie (AAAA-MM-JJTHH:mm) est l’heure de Zurich, quel que soit le fuseau du poste', () => {
+  assert.deepEqual(parseLocalDateTime('2026-01-15T09:30'), new Date('2026-01-15T08:30:00.000Z'));
+  assert.deepEqual(parseLocalDateTime('2026-07-15T23:45'), new Date('2026-07-15T21:45:00.000Z'));
+  assert.deepEqual(parseLocalDateTime('2026-03-29T03:00'), new Date('2026-03-29T01:00:00.000Z'));
+});
+
+test('Saisie manuelle : une date-heure vide ou illisible ne donne aucun instant', () => {
+  for (const text of ['', '2026-01-15', '09:30', '2026-01-15T25:00', '2026-01-15T09:60', 'demain']) {
+    assert.equal(parseLocalDateTime(text), null, text);
+  }
 });

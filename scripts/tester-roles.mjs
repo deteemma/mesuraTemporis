@@ -723,6 +723,89 @@ await check('renommer sur place s’applique à toutes les Imputations de l’Ac
   assert.equal(duplicate.body.code, 'ACTIVITE_NOM_DUPLIQUE');
 });
 
+console.log('\nSaisie manuelle (API et base)');
+// Minuit de la Journée en cours, heure de Zurich, lu en base.
+const midnight = (await query(diane, `SELECT (date_trunc('day', now() AT TIME ZONE 'Europe/Zurich') AT TIME ZONE 'Europe/Zurich') AS m`))
+  .rows[0].m.getTime();
+const at = (minutesFromMidnight) => new Date(midnight + minutesFromMidnight * 60_000).toISOString();
+const manual = (user, body) => call(user, 'POST', '/time-entries', body);
+const manualBody = (overrides = {}) => ({
+  projectId: fixture.p5,
+  activityId: fixture.analysis5,
+  startedAt: at(9 * 60),
+  endedAt: at(10 * 60 + 30),
+  ...overrides,
+});
+
+await check('alice (Affectée) saisit une Imputation terminée : 201, elle apparaît dans la Journée concernée', async () => {
+  const r = await manual(alice, manualBody());
+  assert.equal(r.status, 201);
+  assert.deepEqual(
+    [r.body.userId, r.body.projectId, r.body.activityId, r.body.activityName, r.body.startedAt, r.body.endedAt],
+    [alice.sub, fixture.p5, fixture.analysis5, 'Analyse', at(9 * 60), at(10 * 60 + 30)],
+  );
+  assert.ok((await call(alice, 'GET', '/time-entries/today')).body.some((e) => e.id === r.body.id));
+});
+await check('une saisie qui franchit minuit donne une seule Imputation, rattachée à la Journée de son début, sans Scission', async () => {
+  const before = await countOf(alice);
+  const r = await manual(alice, manualBody({ startedAt: at(-60), endedAt: at(60) }));
+  assert.equal(r.status, 201);
+  assert.equal(await countOf(alice), before + 1);
+  assert.deepEqual(await rangeOf(r.body.id), [at(-60), at(60)]);
+  assert.ok(!(await call(alice, 'GET', '/time-entries/today')).body.some((e) => e.id === r.body.id), 'rattachée à la veille');
+});
+await check('fin égale au début : acceptée', async () => {
+  assert.equal((await manual(alice, manualBody({ endedAt: at(9 * 60) }))).status, 201);
+});
+await check('fin avant début : 400 IMPUTATION_FIN_AVANT_DEBUT, rien n’est créé', async () => {
+  const before = await countOf(alice);
+  const r = await manual(alice, manualBody({ endedAt: at(9 * 60 - 1) }));
+  assert.deepEqual([r.status, r.body.code], [400, 'IMPUTATION_FIN_AVANT_DEBUT']);
+  assert.equal(await countOf(alice), before);
+});
+await check('champ manquant, vide ou illisible : 400 IMPUTATION_CHAMPS_REQUIS, avant tout contrôle d’accès', async () => {
+  for (const field of ['projectId', 'activityId', 'startedAt', 'endedAt']) {
+    for (const value of [undefined, '']) {
+      const r = await manual(alice, manualBody({ [field]: value }));
+      assert.deepEqual([r.status, r.body.code], [400, 'IMPUTATION_CHAMPS_REQUIS'], `${field}=${value}`);
+    }
+  }
+  const unreadable = await manual(alice, manualBody({ startedAt: '09:00' }));
+  assert.deepEqual([unreadable.status, unreadable.body.code], [400, 'IMPUTATION_CHAMPS_REQUIS']);
+  // Même pour un non-affecté : la saisie incomplète est refusée avant l'accès.
+  const incomplete = await manual(chloe, manualBody({ endedAt: undefined }));
+  assert.deepEqual([incomplete.status, incomplete.body.code], [400, 'IMPUTATION_CHAMPS_REQUIS']);
+});
+await check('Projet non affecté, inconnu ou invalide : 404 PROJET_INTROUVABLE ; bruno, retiré de P5, aussi', async () => {
+  for (const [user, projectId] of [
+    [chloe, fixture.p5],
+    [alice, fixture.p6],
+    [bruno, fixture.p5],
+    [alice, '00000000-0000-4000-8000-000000000000'],
+    [alice, 'pas-un-uuid'],
+  ]) {
+    const r = await manual(user, manualBody({ projectId }));
+    assert.deepEqual([r.status, r.body.code], [404, 'PROJET_INTROUVABLE'], `${user.login} ${projectId}`);
+  }
+});
+await check('Activité inconnue, d’un autre Projet ou invalide : 404 ACTIVITE_INTROUVABLE', async () => {
+  for (const activityId of [fixture.meeting6, '00000000-0000-4000-8000-000000000000', 'pas-un-uuid']) {
+    const r = await manual(alice, manualBody({ activityId }));
+    assert.deepEqual([r.status, r.body.code], [404, 'ACTIVITE_INTROUVABLE'], activityId);
+  }
+});
+await check('diane (Administrateur, non affectée) saisit sur P6, pour elle-même ; un userId envoyé est ignoré', async () => {
+  const r = await manual(diane, manualBody({ projectId: fixture.p6, activityId: fixture.meeting6, userId: alice.sub }));
+  assert.equal(r.status, 201);
+  assert.equal(r.body.userId, diane.sub);
+});
+await check('la Saisie manuelle n’arrête pas le Chronomètre en cours', async () => {
+  const timer = (await start(alice, { projectId: fixture.p5, activityId: fixture.meeting5 })).body.timer;
+  assert.equal((await manual(alice, manualBody())).status, 201);
+  assert.deepEqual(await runningOf(alice), [timer.id]);
+  await call(alice, 'POST', '/time-entries/timer/stop');
+});
+
 // Fin de section : Imputations et Chronomètres partent avec les Projets.
 await call(diane, 'DELETE', `/projects/${fixture.p5}`);
 await call(diane, 'DELETE', `/projects/${fixture.p6}`);
@@ -852,6 +935,11 @@ await check('un seul Chronomètre par Utilisateur', async () => {
 await check('fin ≥ début', async () => {
   await assert.rejects(
     query(alice, `UPDATE time_entry SET ended_at = started_at - interval '1 second' WHERE id = $1`, [data.aliceEntry]),
+    /time_entry_end_after_start/,
+  );
+  await assert.rejects(
+    query(alice, `INSERT INTO time_entry (id, user_id, project_id, activity_id, started_at, ended_at)
+      VALUES (gen_random_uuid(), $1, $2, $3, now(), now() - interval '1 minute')`, [alice.sub, data.p1, data.a1]),
     /time_entry_end_after_start/,
   );
 });

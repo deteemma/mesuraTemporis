@@ -1,8 +1,8 @@
 // Écran « Saisie de temps » : Chronomètre, recherche combinée Activité→Projet
 // (ADR-0014), Imputations de la Journée (ADR-0012) avec Édition à la volée et
 // Scission (ADR-0013), Relancer et renommage sur place (ADR-0015), repris de la
-// source et de l'ébauche de la branche prototype/saisie-temps. La Saisie
-// manuelle et l'historique relèvent de leurs propres tickets.
+// source et de l'ébauche de la branche prototype/saisie-temps, et Saisie
+// manuelle (#18). L'historique relève de son propre ticket.
 import {
   type ActivityDto,
   type ActivityFieldAction,
@@ -21,11 +21,12 @@ import {
   formatTimeOfDay,
   groupByActivity,
   initialActivityFieldState,
+  parseLocalDateTime,
   recentPairs,
   reduceActivityField,
   zurichInstant,
 } from '@app/shared';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { type FormEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityNameField } from '../ActivityNameField';
 import { ApiError, request } from '../api';
 import { useLanguage } from '../i18n/i18n';
@@ -216,6 +217,48 @@ export function TimeEntryPage() {
     reload();
   }
 
+  // --- Saisie manuelle ---
+  const [manual, setManual] = useState({ projectId: '', activityId: '', start: '', end: '' });
+  const [manualActivities, setManualActivities] = useState<ActivityDto[]>([]);
+  const [manualError, setManualError] = useState<string | null>(null);
+
+  // Activités du Projet choisi, relues à chaque changement de Projet.
+  useEffect(() => {
+    if (!manual.projectId) return;
+    let active = true;
+    request<ActivityDto[]>(`/projects/${manual.projectId}/activities`).then((list) => {
+      if (active) setManualActivities(list);
+    }, notifyError);
+    return () => {
+      active = false;
+    };
+  }, [manual.projectId, notifyError]);
+
+  // Comme dans la source, un formulaire incomplet n'est pas envoyé. Les heures
+  // saisies sont celles de Zurich (ADR-0012) ; une saisie qui franchit minuit
+  // est acceptée telle quelle. Un refus s'affiche en bandeau sous le formulaire (E3).
+  async function addManual(event: FormEvent) {
+    event.preventDefault();
+    if (!manual.projectId || !manual.activityId || !manual.start || !manual.end) return;
+    try {
+      await request<TimeEntryDto>('/time-entries', {
+        method: 'POST',
+        body: JSON.stringify({
+          projectId: manual.projectId,
+          activityId: manual.activityId,
+          startedAt: parseLocalDateTime(manual.start)?.toISOString(),
+          endedAt: parseLocalDateTime(manual.end)?.toISOString(),
+        }),
+      });
+      setManual((current) => ({ ...current, start: '', end: '' }));
+      setManualError(null);
+      reload();
+    } catch (error) {
+      if (error instanceof ApiError && error.status === 401) return;
+      setManualError(refusalMessage(error, 'ERREUR_MODIFICATION_NON_ENREGISTREE'));
+    }
+  }
+
   // --- Imputations de la Journée, regroupées par Projet et Activité ---
   const groups = useMemo(() => groupByActivity(entries), [entries]);
   const [expanded, setExpanded] = useState<ReadonlySet<string>>(new Set());
@@ -315,6 +358,63 @@ export function TimeEntryPage() {
           </div>
         )}
       </section>
+
+      <details className="card manuel">
+        <summary>{t('SAISIE_AJOUTER_MANUELLE')}</summary>
+        <form className="manuel__form" onSubmit={(event) => void addManual(event)}>
+          <select
+            className="field"
+            aria-label={t('CHAMP_PROJET')}
+            value={manual.projectId}
+            onChange={(event) => {
+              setManualActivities([]);
+              setManual((current) => ({ ...current, projectId: event.target.value, activityId: '' }));
+            }}
+          >
+            <option value="">{t('CHAMP_PROJET')}</option>
+            {projects.map((project) => (
+              <option key={project.id} value={project.id}>
+                {project.name}
+              </option>
+            ))}
+          </select>
+          <select
+            className="field"
+            aria-label={t('CHAMP_ACTIVITE')}
+            value={manual.activityId}
+            onChange={(event) => setManual((current) => ({ ...current, activityId: event.target.value }))}
+          >
+            <option value="">{t('CHAMP_ACTIVITE')}</option>
+            {manualActivities.map((activity) => (
+              <option key={activity.id} value={activity.id}>
+                {activity.name}
+              </option>
+            ))}
+          </select>
+          <input
+            className="field"
+            type="datetime-local"
+            aria-label={t('CHAMP_HEURE_DEBUT')}
+            value={manual.start}
+            onChange={(event) => setManual((current) => ({ ...current, start: event.target.value }))}
+          />
+          <input
+            className="field"
+            type="datetime-local"
+            aria-label={t('CHAMP_HEURE_FIN')}
+            value={manual.end}
+            onChange={(event) => setManual((current) => ({ ...current, end: event.target.value }))}
+          />
+          <button type="submit" className="btn btn-secondary">
+            {t('BOUTON_AJOUTER')}
+          </button>
+        </form>
+        {manualError && (
+          <p className="banner-error" role="alert">
+            {manualError}
+          </p>
+        )}
+      </details>
 
       <section className="card entries">
         <h2 className="entries__titre">{t('SAISIE_TITRE_ENTREES_JOUR')}</h2>

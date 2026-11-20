@@ -110,6 +110,28 @@ export const inlineEditSchema = z.object({
 });
 export type InlineEditInput = z.infer<typeof inlineEditSchema>;
 
+const requiredText = z.string(code('IMPUTATION_CHAMPS_REQUIS')).min(1, code('IMPUTATION_CHAMPS_REQUIS'));
+
+/**
+ * Saisie manuelle : une Imputation terminée, sur une Activité du Projet. La fin
+ * peut tomber un autre jour que le début : la saisie qui franchit minuit est
+ * acceptée telle quelle, sans Scission, et appartient à la Journée de son début
+ * (ADR-0012). Une fin avant le début est refusée (E2) ; une fin égale au début,
+ * non. L'interface saisit à la minute ; l'API ne l'impose pas.
+ */
+export const manualEntrySchema = z
+  .object({
+    projectId: requiredText,
+    activityId: requiredText,
+    startedAt: instantSchema,
+    endedAt: instantSchema,
+  })
+  .refine((entry) => new Date(entry.endedAt) >= new Date(entry.startedAt), {
+    ...code('IMPUTATION_FIN_AVANT_DEBUT'),
+    path: ['endedAt'],
+  });
+export type ManualEntryInput = z.infer<typeof manualEntrySchema>;
+
 /** Imputation éditée, et celle que la Scission a créée sur l'autre Journée, s'il y en a une. */
 export interface EditedTimeEntryDto {
   entry: TimeEntryDto;

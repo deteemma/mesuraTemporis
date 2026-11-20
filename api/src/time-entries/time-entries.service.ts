@@ -7,6 +7,7 @@ import {
   planInlineEdit,
   type EditedTimeEntryDto,
   type InlineEditInput,
+  type ManualEntryInput,
   type StartTimerInput,
   type StartedTimerDto,
   type TimeEntryDto,
@@ -86,6 +87,34 @@ export class TimeEntriesService {
       const stopped = await stopRunningTimer(tx, user.id, new Date());
       if (!stopped) throw noActiveTimer();
       return toDto(await selectEntries(tx).where('e.id', '=', stopped.id).executeTakeFirstOrThrow());
+    });
+  }
+
+  /**
+   * Saisie manuelle d'une Imputation terminée, toujours pour soi (Administrateur
+   * compris) : enregistrée telle quelle, même si elle franchit minuit (pas de
+   * Scission, ADR-0012). L'accès au Projet est vérifié en amont (guard) et en
+   * base (RLS) ; la base refuse aussi une fin avant le début (contrainte).
+   */
+  addManual(user: AuthenticatedUser, input: ManualEntryInput): Promise<TimeEntryDto> {
+    return this.database.asUser(user, async (tx) => {
+      const project = await tx.selectFrom('project').select('id').where('id', '=', input.projectId).executeTakeFirst();
+      if (!project) throw projectNotFound();
+      const activityId = await findActivity(tx, input.projectId, input.activityId);
+
+      const id = randomUUID();
+      await tx
+        .insertInto('time_entry')
+        .values({
+          id,
+          user_id: user.id,
+          project_id: input.projectId,
+          activity_id: activityId,
+          started_at: new Date(input.startedAt),
+          ended_at: new Date(input.endedAt),
+        })
+        .execute();
+      return toDto(await selectEntries(tx).where('e.id', '=', id).executeTakeFirstOrThrow());
     });
   }
 

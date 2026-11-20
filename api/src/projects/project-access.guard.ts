@@ -7,14 +7,22 @@ import {
   applyDecorators,
 } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
-import { can, type ProjectAction } from '@app/shared';
+import { can, type ErrorCode, type ProjectAction } from '@app/shared';
 import type { FastifyRequest } from 'fastify';
 import { sql } from 'kysely';
 import { z } from 'zod';
 import { DatabaseService } from '../db/database.service.js';
 import { accessDenied, projectNotFound } from '../errors.js';
+import { ZodValidationPipe } from '../zod-validation.pipe.js';
 
 const PROJECT_ACTION = 'projectAction';
+const BODY_CHECK = 'projectAccessBodyCheck';
+
+/** Validation du corps à faire avant le contrôle d'accès (le guard passe avant les pipes). */
+export interface BodyCheck {
+  schema: z.ZodType;
+  fallback: ErrorCode;
+}
 const uuid = z.uuid();
 
 /**
@@ -24,9 +32,17 @@ const uuid = z.uuid();
  * du Projet ne lui est pas révélée ; un non-Administrateur qui tente une
  * action d'administration reçoit 403 `ACCES_REFUSE`. Première barrière ; la RLS
  * PostgreSQL est la seconde (ADR-0006, ADR-0017).
+ *
+ * `validateBodyFirst` : le corps est d'abord validé, pour qu'une saisie
+ * incomplète reçoive son refus 400 avant toute question d'accès (Saisie
+ * manuelle, contrat d'API #11).
  */
-export const RequireProjectAccess = (action: ProjectAction) =>
-  applyDecorators(SetMetadata(PROJECT_ACTION, action), UseGuards(ProjectAccessGuard));
+export const RequireProjectAccess = (action: ProjectAction, validateBodyFirst?: BodyCheck) =>
+  applyDecorators(
+    SetMetadata(PROJECT_ACTION, action),
+    SetMetadata(BODY_CHECK, validateBodyFirst),
+    UseGuards(ProjectAccessGuard),
+  );
 
 @Injectable()
 export class ProjectAccessGuard implements CanActivate {
@@ -37,6 +53,7 @@ export class ProjectAccessGuard implements CanActivate {
 
   async canActivate(ctx: ExecutionContext): Promise<boolean> {
     const action = this.reflector.get<ProjectAction>(PROJECT_ACTION, ctx.getHandler());
+    const bodyCheck = this.reflector.get<BodyCheck | undefined>(BODY_CHECK, ctx.getHandler());
     const request = ctx
       .switchToHttp()
       .getRequest<FastifyRequest<{ Params: { projectId?: string }; Body: { projectId?: unknown } | undefined }>>();
@@ -46,6 +63,7 @@ export class ProjectAccessGuard implements CanActivate {
     // Une opération d'administration refuse le non-Administrateur (403) avant
     // toute question d'affectation (contrat d'API, #11).
     if (!can({ isAdmin: user.isAdmin, isAssigned: true }, action)) throw accessDenied();
+    if (bodyCheck) new ZodValidationPipe(bodyCheck.schema, bodyCheck.fallback).transform(request.body);
     if (!uuid.safeParse(projectId).success) throw projectNotFound();
 
     const isAssigned = await this.database.asUser(user, async (tx) => {

@@ -824,6 +824,39 @@ select {
   padding-inline: var(--space-5);
 }
 
+/* Saisie manuelle (repliée par défaut, comme dans la source) */
+
+.manuel {
+  padding: var(--space-3) var(--space-5);
+}
+
+.manuel summary {
+  cursor: pointer;
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+  font-weight: 500;
+  padding: var(--space-2) 0;
+}
+
+.manuel[open] summary {
+  color: var(--color-text);
+}
+
+.manuel__form {
+  display: flex;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+  padding-top: var(--space-3);
+}
+
+.manuel__form .field {
+  flex: 1 1 160px;
+}
+
+.manuel .banner-error {
+  margin-top: var(--space-3);
+}
+
 .entries {
   padding: var(--space-4) var(--space-5);
 }
