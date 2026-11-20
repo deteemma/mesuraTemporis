@@ -3,6 +3,7 @@
 // l'API le renvoie tel quel dans le corps `{ code, message }` du refus.
 import { z } from 'zod';
 import type { ErrorCode } from './error-codes.js';
+import type { HistoryPage } from './history.js';
 import type { ProjectRole } from './roles.js';
 
 const code = (value: ErrorCode) => ({ error: value });
@@ -131,6 +132,13 @@ export const manualEntrySchema = z
     path: ['endedAt'],
   });
 export type ManualEntryInput = z.infer<typeof manualEntrySchema>;
+
+/**
+ * Page de l'historique des Journées précédentes : Imputations terminées
+ * regroupées par Journée puis par Projet/Activité ; `nextCursor` se passe en
+ * paramètre `before` pour charger la page suivante.
+ */
+export type HistoryPageDto = HistoryPage<TimeEntryDto>;
 
 /** Imputation éditée, et celle que la Scission a créée sur l'autre Journée, s'il y en a une. */
 export interface EditedTimeEntryDto {

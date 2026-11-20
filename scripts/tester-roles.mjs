@@ -806,6 +806,47 @@ await check('la Saisie manuelle n’arrête pas le Chronomètre en cours', async
   await call(alice, 'POST', '/time-entries/timer/stop');
 });
 
+console.log('\nHistorique paginé (API)');
+const zurichDay = (instant) => new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Zurich' }).format(instant);
+const todayDay = zurichDay(midnight);
+const yesterdayDay = zurichDay(midnight - 1);
+const history = (user, before) =>
+  call(user, 'GET', `/time-entries/history${before === undefined ? '' : `?before=${encodeURIComponent(before)}`}`);
+const historyEntries = (page) => page.days.flatMap((d) => d.groups.flatMap((g) => g.entries));
+// Une Imputation l'avant-veille à 23:00 (heure de Zurich), sous la Journée de la veille.
+const olderEntry = (await manual(alice, manualBody({ startedAt: at(-25 * 60), endedAt: at(-24 * 60 - 30) }))).body;
+const olderDay = zurichDay(new Date(olderEntry.startedAt).getTime());
+
+await check('l’historique exclut la Journée en cours et le Chronomètre ; Journées Europe/Zurich, la plus récente d’abord', async () => {
+  const timer = (await start(alice, { projectId: fixture.p5, activityId: fixture.meeting5 })).body.timer;
+  const page = (await history(alice)).body;
+  const days = page.days.map((d) => d.day);
+  assert.ok(days.length >= 2);
+  assert.equal(days[0], yesterdayDay);
+  assert.ok(days.every((d) => d < todayDay));
+  assert.deepEqual(days, [...days].sort().reverse());
+  const entries = historyEntries(page);
+  assert.ok(entries.every((e) => e.endedAt !== null && e.id !== timer.id));
+  assert.ok(page.days.every((d) => d.groups.every((g) => g.entries.every((e) => zurichDay(new Date(e.startedAt).getTime()) === d.day))));
+  assert.ok(entries.some((e) => e.id === olderEntry.id));
+  await call(alice, 'POST', '/time-entries/timer/stop');
+});
+await check('l’historique ne renvoie que ses propres Imputations, Administrateur compris', async () => {
+  for (const user of [alice, bruno, diane]) {
+    assert.ok(historyEntries((await history(user)).body).every((e) => e.userId === user.sub), user.login);
+  }
+});
+await check('curseur : la page commence à la Journée `before` incluse ; aujourd’hui, futur ou illisible valent hier', async () => {
+  const fromOlder = (await history(alice, olderDay)).body;
+  assert.equal(fromOlder.days[0].day, olderDay);
+  assert.ok(historyEntries(fromOlder).some((e) => e.id === olderEntry.id));
+  const reference = (await history(alice)).body;
+  for (const before of [todayDay, '2999-01-01', 'n-importe-quoi', '2026-02-31']) {
+    assert.deepEqual((await history(alice, before)).body, reference, before);
+  }
+  assert.deepEqual((await history(alice, '1970-01-01')).body, { days: [], nextCursor: null });
+});
+
 // Fin de section : Imputations et Chronomètres partent avec les Projets.
 await call(diane, 'DELETE', `/projects/${fixture.p5}`);
 await call(diane, 'DELETE', `/projects/${fixture.p6}`);

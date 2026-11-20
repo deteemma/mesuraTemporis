@@ -1,9 +1,10 @@
-import { Body, Controller, Delete, Get, HttpCode, HttpStatus, Param, Patch, Post } from '@nestjs/common';
+import { Body, Controller, Delete, Get, HttpCode, HttpStatus, Param, Patch, Post, Query } from '@nestjs/common';
 import {
   inlineEditSchema,
   manualEntrySchema,
   startTimerSchema,
   type EditedTimeEntryDto,
+  type HistoryPageDto,
   type InlineEditInput,
   type ManualEntryInput,
   type StartTimerInput,
@@ -64,6 +65,12 @@ export class TimeEntriesController {
   @Get('today')
   today(@CurrentUser() user: AuthenticatedUser): Promise<TimeEntryDto[]> {
     return this.timeEntries.today(user);
+  }
+
+  /** Historique paginé des Journées précédentes ; `before` : Journée de début de la page (curseur). */
+  @Get('history')
+  history(@CurrentUser() user: AuthenticatedUser, @Query('before') before?: string): Promise<HistoryPageDto> {
+    return this.timeEntries.history(user, typeof before === 'string' ? before : undefined);
   }
 
   /** Édition à la volée ; renvoie l'éventuelle Imputation issue de la Scission. */

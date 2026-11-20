@@ -2,7 +2,7 @@
 // (ADR-0014), Imputations de la Journée (ADR-0012) avec Édition à la volée et
 // Scission (ADR-0013), Relancer et renommage sur place (ADR-0015), repris de la
 // source et de l'ébauche de la branche prototype/saisie-temps, et Saisie
-// manuelle (#18). L'historique relève de son propre ticket.
+// manuelle (#18), puis l'historique paginé (#19).
 import {
   type ActivityDto,
   type ActivityFieldAction,
@@ -15,16 +15,13 @@ import {
   type TimeEntryDto,
   type TimeInput,
   type TimerStatusDto,
-  type Day,
   dayOf,
-  durationSeconds,
   formatSeconds,
   formatTimeOfDay,
   groupByActivity,
   initialActivityFieldState,
-  parseDateInput,
+  parseEnteredRange,
   recentPairs,
-  parseTimeInput,
   reduceActivityField,
   zurichInstant,
 } from '@app/shared';
@@ -33,7 +30,8 @@ import { ActivityNameField } from '../ActivityNameField';
 import { ApiError, request } from '../api';
 import { useLanguage } from '../i18n/i18n';
 import { useNotify, useNotifyError } from '../notifications';
-import { TimeField, type TimeFieldHandle } from '../TimeField';
+import { EntryLine } from '../EntryLine';
+import { HistorySection, type ProjectActivity } from './HistorySection';
 
 const COUNTER_INTERVAL_MS = 1000;
 
@@ -147,25 +145,33 @@ export function TimeEntryPage() {
     reload();
   }
 
+  // Retour en haut de l'écran, sur le Chronomètre.
+  const heroRef = useRef<HTMLElement>(null);
+  const backToToday = () => heroRef.current?.scrollIntoView({ behavior: 'smooth' });
+
   // Relancer : un Chronomètre démarre aujourd'hui sur le même Projet et la même
-  // Activité ; l'Imputation d'origine reste inchangée, le Chronomètre en cours est arrêté.
-  async function relaunch(entry: TimeEntryDto) {
+  // Activité ; l'Imputation d'origine reste inchangée, le Chronomètre en cours est
+  // arrêté. Renvoie `true` s'il a démarré.
+  async function relaunch(pair: ProjectActivity): Promise<boolean> {
     try {
       const started = await request<StartedTimerDto>('/time-entries/timer/start', {
         method: 'POST',
-        body: JSON.stringify({ projectId: entry.projectId, activityId: entry.activityId }),
+        body: JSON.stringify({ projectId: pair.projectId, activityId: pair.activityId }),
       });
       const previous = started.previousTimerStopped;
       if (previous?.endedAt) notify(t('NOTIF_CHRONO_PRECEDENT_ARRETE', { heure: formatTimeOfDay(previous.endedAt) }));
+      return true;
     } catch (error) {
       notifyError(error);
+      return false;
+    } finally {
+      reload();
     }
-    reload();
   }
 
   // Rien à relancer sur la ligne dont le Projet et l'Activité sont ceux du Chronomètre en cours.
-  const isRunning = (entry: TimeEntryDto) =>
-    !!timer && timer.projectId === entry.projectId && timer.activityId === entry.activityId;
+  const isRunning = (pair: ProjectActivity) =>
+    !!timer && timer.projectId === pair.projectId && timer.activityId === pair.activityId;
 
   /** Message d'un refus à afficher sur place : son Code d'erreur traduit, sinon `fallback`. */
   const refusalMessage = (error: unknown, fallback: string) =>
@@ -245,23 +251,15 @@ export function TimeEntryPage() {
     event.preventDefault();
     const { projectId, activityId, startDate, startTime, endDate, endTime } = manual;
     if (!projectId || !activityId || !startDate || !startTime || !endDate || !endTime) return;
-    const startDay = parseDateInput(startDate);
-    const endDay = parseDateInput(endDate);
-    if (!startDay || !endDay) {
-      setManualError(t('CHAMP_DATE_ERREUR_INVALIDE'));
+    const range = parseEnteredRange({ startDate, startTime, endDate, endTime });
+    if ('error' in range) {
+      setManualError(t(range.error === 'date' ? 'CHAMP_DATE_ERREUR_INVALIDE' : 'CHAMP_HEURE_ERREUR_INVALIDE'));
       return;
     }
-    const start = parseTimeInput(startTime);
-    const end = parseTimeInput(endTime);
-    if (!start || !end) {
-      setManualError(t('CHAMP_HEURE_ERREUR_INVALIDE'));
-      return;
-    }
-    const instant = (day: Day, time: TimeInput) => zurichInstant(day, time.hours, time.minutes).toISOString();
     try {
       await request<TimeEntryDto>('/time-entries', {
         method: 'POST',
-        body: JSON.stringify({ projectId, activityId, startedAt: instant(startDay, start), endedAt: instant(endDay, end) }),
+        body: JSON.stringify({ projectId, activityId, startedAt: range.startedAt.toISOString(), endedAt: range.endedAt.toISOString() }),
       });
       setManual((current) => ({ ...current, startDate: '', startTime: '', endDate: '', endTime: '' }));
       setManualError(null);
@@ -289,7 +287,7 @@ export function TimeEntryPage() {
     <div className="page">
       <h1>{t('NAV_SAISIE_TEMPS')}</h1>
 
-      <section className={`hero card${timer ? ' hero--actif' : ''}`}>
+      <section ref={heroRef} className={`hero card${timer ? ' hero--actif' : ''}`}>
         {timer ? (
           <div className="hero__actif">
             <span className="hero__pulse"></span>
@@ -509,60 +507,17 @@ export function TimeEntryPage() {
           })}
         </ul>
       </section>
+
+      <HistorySection
+        version={version}
+        isRunning={isRunning}
+        onEditTime={editTime}
+        onRemove={(id) => void remove(id)}
+        // Depuis l'historique, l'écran remonte ensuite sur le Chronomètre, comme dans la source.
+        onRelaunch={(pair) => void relaunch(pair).then((started) => started && backToToday())}
+        onAdded={reload}
+        onBackToToday={backToToday}
+      />
     </div>
-  );
-}
-
-interface EntryLineProps {
-  entry: TimeEntryDto;
-  running: boolean;
-  onEditTime: (field: 'startedAt' | 'endedAt', time: TimeInput) => Promise<string | null>;
-  onRelaunch: () => void;
-  onRemove: () => void;
-}
-
-/** Ligne d'une Imputation terminée : heures éditables sur place, Relancer, supprimer. */
-function EntryLine({ entry, running, onEditTime, onRelaunch, onRemove }: EntryLineProps) {
-  const { t } = useLanguage();
-  const endField = useRef<TimeFieldHandle>(null);
-  return (
-    <li className="entries__ligne">
-      <span className="entries__puce"></span>
-      <div className="entries__info">
-        <span className="entries__activite">{entry.activityName}</span>
-        <span className="entries__projet">{entry.projectName}</span>
-      </div>
-      <span className="entries__horaire">
-        <TimeField
-          value={formatTimeOfDay(entry.startedAt)}
-          ariaLabel={t('ARIA_MODIFIER_HEURE_DEBUT')}
-          onValidate={(time, viaEnter) => {
-            // Entrée sur le début enchaîne sur la fin, comme dans la source.
-            if (viaEnter) endField.current?.open();
-            return onEditTime('startedAt', time);
-          }}
-        />{' '}
-        →{' '}
-        <TimeField
-          ref={endField}
-          value={formatTimeOfDay(entry.endedAt!)}
-          ariaLabel={t('ARIA_MODIFIER_HEURE_FIN')}
-          onValidate={(time) => onEditTime('endedAt', time)}
-        />
-      </span>
-      <span className="badge">{formatSeconds(durationSeconds(entry.startedAt, entry.endedAt!))}</span>
-      <button
-        type="button"
-        className="btn btn-secondary entries__relancer"
-        disabled={running}
-        aria-label={t('ARIA_RELANCER')}
-        onClick={onRelaunch}
-      >
-        {t('BOUTON_RELANCER')}
-      </button>
-      <button type="button" className="btn btn-danger entries__supprimer" aria-label={t('ARIA_SUPPRIMER_IMPUTATION')} onClick={onRemove}>
-        ✕
-      </button>
-    </li>
   );
 }

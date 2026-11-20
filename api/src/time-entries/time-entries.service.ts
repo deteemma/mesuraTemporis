@@ -1,11 +1,14 @@
 import { randomUUID } from 'node:crypto';
 import { Injectable } from '@nestjs/common';
 import {
+  buildHistoryPage,
   currentDay,
   dayBounds,
+  historyStartDay,
   normalizeName,
   planInlineEdit,
   type EditedTimeEntryDto,
+  type HistoryPageDto,
   type InlineEditInput,
   type ManualEntryInput,
   type StartTimerInput,
@@ -134,6 +137,26 @@ export class TimeEntriesService {
         .orderBy('e.id')
         .execute();
       return rows.map(toDto);
+    });
+  }
+
+  /**
+   * Page de l'historique des Journées précédentes de l'Utilisateur courant
+   * (Administrateur compris : les siennes seulement), à partir de la Journée
+   * `before` incluse, la Journée en cours toujours exclue (`historyStartDay`).
+   * Le Chronomètre n'y figure jamais.
+   */
+  history(user: AuthenticatedUser, before: string | undefined): Promise<HistoryPageDto> {
+    const { end } = dayBounds(historyStartDay(before, currentDay()));
+    return this.database.asUser(user, async (tx) => {
+      const rows = await selectEntries(tx)
+        .where('e.user_id', '=', user.id)
+        .where('e.ended_at', 'is not', null)
+        .where('e.started_at', '<=', end)
+        .orderBy('e.started_at', 'desc')
+        .orderBy('e.id')
+        .execute();
+      return buildHistoryPage(rows.map(toDto));
     });
   }
 

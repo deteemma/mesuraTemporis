@@ -3,7 +3,8 @@
 // est une Journée Europe/Zurich (ADR-0012). La frappe est souple (validé le
 // 2026-11-20) : « . » ou « / » comme séparateur, le même dans toute la date,
 // année sur quatre chiffres ou sur deux (lue au XXIe siècle : 26 → 2026).
-import type { Day } from './day.js';
+import { type Day, zurichInstant } from './day.js';
+import { parseTimeInput } from './time-input.js';
 
 const DATE_INPUT = /^(\d{1,2})([./])(\d{1,2})\2(\d{4}|\d{2})$/;
 
@@ -23,4 +24,29 @@ export function parseDateInput(text: string): Day | null {
 export function formatDateInput(day: Day): string {
   const [year, month, date] = day.split('-');
   return `${date}.${month}.${year}`;
+}
+
+/** Bornes d'une Imputation telles que saisies : dates jj.mm.aaaa et heures 24 h. */
+export interface EnteredRange {
+  startDate: string;
+  startTime: string;
+  endDate: string;
+  endTime: string;
+}
+
+/**
+ * Instants des bornes saisies, lues en heure de Zurich (ADR-0012), ou la
+ * nature de la première saisie illisible : une date, puis une heure (ADR-0022).
+ */
+export function parseEnteredRange(range: EnteredRange): { startedAt: Date; endedAt: Date } | { error: 'date' | 'time' } {
+  const startDay = parseDateInput(range.startDate);
+  const endDay = parseDateInput(range.endDate);
+  if (!startDay || !endDay) return { error: 'date' };
+  const start = parseTimeInput(range.startTime);
+  const end = parseTimeInput(range.endTime);
+  if (!start || !end) return { error: 'time' };
+  return {
+    startedAt: zurichInstant(startDay, start.hours, start.minutes),
+    endedAt: zurichInstant(endDay, end.hours, end.minutes),
+  };
 }
