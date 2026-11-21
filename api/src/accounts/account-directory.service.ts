@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { APP_ADMIN_ROLE, type CreateUserInput, isAdministrator } from '@app/shared';
 import { AppConfig, type KeycloakAdminConfig } from '../config/app-config.js';
-import { type BusinessError, emailTaken, loginTaken, userNotFound } from '../errors.js';
+import { type BusinessError, emailInvalid, emailTaken, loginInvalid, loginTaken, nameInvalid, userNotFound } from '../errors.js';
 
 /** Marge avant l'expiration du jeton du compte de service. */
 const TOKEN_MARGIN_MS = 30_000;
@@ -57,7 +57,9 @@ export class AccountDirectory {
    * compte tel que Keycloak l'a enregistré (Login et Email en minuscules). Le
    * mot de passe temporaire est ce Login enregistré, à changer à la première
    * connexion (ADR-0018). Un Login ou un Email déjà pris : `LOGIN_EXISTANT` ou
-   * `EMAIL_EXISTANT`. Si une étape suivante échoue, le compte est supprimé.
+   * `EMAIL_EXISTANT` ; refusé par les règles de format de Keycloak :
+   * `LOGIN_INVALIDE`, `EMAIL_INVALIDE` ou `NOM_INVALIDE`. Si une étape suivante
+   * échoue, le compte est supprimé.
    */
   async createAccount(input: CreateUserInput): Promise<Account> {
     const response = await this.send('POST', '/users', {
@@ -67,6 +69,7 @@ export class AccountDirectory {
       enabled: true,
     });
     if (response.status === 409) throw await conflict(response);
+    if (response.status === 400) throw await invalid(response);
     await ensureOk(response);
     const id = response.headers.get('location')?.split('/').pop();
     if (!id) throw new Error('Keycloak n’a pas renvoyé l’adresse du compte créé');
@@ -90,7 +93,8 @@ export class AccountDirectory {
 
   /**
    * Change l'Email du compte et renvoie le compte tel qu'enregistré. Compte
-   * absent : `UTILISATEUR_INTROUVABLE` ; Email déjà pris : `EMAIL_EXISTANT`.
+   * absent : `UTILISATEUR_INTROUVABLE` ; Email déjà pris : `EMAIL_EXISTANT` ;
+   * format refusé par Keycloak : `EMAIL_INVALIDE`.
    */
   async changeEmail(userId: string, email: string): Promise<Account> {
     const path = userPath(userId);
@@ -102,6 +106,7 @@ export class AccountDirectory {
     const response = await this.send('PUT', path, { ...representation, email });
     if (response.status === 404) throw userNotFound();
     if (response.status === 409) throw emailTaken();
+    if (response.status === 400) throw await invalid(response);
     await ensureOk(response);
     return this.account(userId);
   }
@@ -195,6 +200,31 @@ const userPath = (userId: string) => `/users/${encodeURIComponent(userId)}`;
 async function conflict(response: Response): Promise<BusinessError> {
   const { errorMessage } = (await response.json().catch(() => ({}))) as { errorMessage?: string };
   return /email/i.test(errorMessage ?? '') ? emailTaken() : loginTaken();
+}
+
+/** Code de refus par champ de la représentation Keycloak. */
+const INVALID_FIELD = new Map<string, () => BusinessError>([
+  ['username', loginInvalid],
+  ['email', emailInvalid],
+  ['firstName', nameInvalid],
+]);
+
+/**
+ * 400 de Keycloak sur un format refusé : `{ field, errorMessage }`, ou
+ * `{ errors: [...] }` si plusieurs champs le sont (le premier l'emporte). Un
+ * autre 400 reste une erreur imprévue.
+ */
+async function invalid(response: Response): Promise<Error> {
+  const text = await response.text();
+  let body: { field?: string; errors?: { field?: string }[] } = {};
+  try {
+    body = JSON.parse(text) as typeof body;
+  } catch {
+    // Corps illisible : erreur imprévue ci-dessous.
+  }
+  const field = body.field ?? body.errors?.[0]?.field;
+  const refusal = field === undefined ? undefined : INVALID_FIELD.get(field);
+  return refusal ? refusal() : new Error(`Keycloak a répondu 400 : ${text}`);
 }
 
 async function ensureOk(response: Response): Promise<void> {

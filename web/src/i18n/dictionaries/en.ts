@@ -113,6 +113,9 @@ export const enErrors: Record<ErrorCode, string> = {
   LOGIN_EXISTANT: 'This username already exists',
   EMAIL_REQUIS: 'Email required',
   EMAIL_EXISTANT: 'This email already exists',
+  LOGIN_INVALIDE: 'Invalid username: at least 3 characters, letters, digits and . - _ @ only',
+  EMAIL_INVALIDE: 'Invalid email',
+  NOM_INVALIDE: 'Invalid name: at most 255 characters, no special characters',
   UTILISATEUR_COMPTE_INITIAL_PROTEGE: 'The initial account cannot lose its role or be deleted',
   UTILISATEUR_ACTION_SUR_SOI_INTERDITE: 'You cannot remove your own role or delete your own account',
 };

@@ -24,6 +24,9 @@ export const noActiveTimer = () => new BusinessError(HttpStatus.NOT_FOUND, 'AUCU
 export const endBeforeStart = () => new BusinessError(HttpStatus.BAD_REQUEST, 'IMPUTATION_FIN_AVANT_DEBUT');
 export const loginTaken = () => new BusinessError(HttpStatus.CONFLICT, 'LOGIN_EXISTANT');
 export const emailTaken = () => new BusinessError(HttpStatus.CONFLICT, 'EMAIL_EXISTANT');
+export const loginInvalid = () => new BusinessError(HttpStatus.BAD_REQUEST, 'LOGIN_INVALIDE');
+export const emailInvalid = () => new BusinessError(HttpStatus.BAD_REQUEST, 'EMAIL_INVALIDE');
+export const nameInvalid = () => new BusinessError(HttpStatus.BAD_REQUEST, 'NOM_INVALIDE');
 
 /** Vrai si l'erreur PostgreSQL est la violation de l'index d'unicité nommé. */
 export function isUniqueViolation(error: unknown, constraint: string): boolean {

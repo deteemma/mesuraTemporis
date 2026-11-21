@@ -1424,6 +1424,22 @@ await check('création : Login existant → 409 LOGIN_EXISTANT ; Email existant,
   assert.equal((await keycloak('GET', `/users?username=double-${RUN}&exact=true`)).body.length, 0);
 });
 
+await check('création refusée par le format de l’Annuaire → 400 LOGIN_INVALIDE / EMAIL_INVALIDE / NOM_INVALIDE ; rien n’est créé', async () => {
+  const refusals = [
+    [{ login: 'ab', email: `court-${RUN}@exemple.test` }, 'LOGIN_INVALIDE'],
+    [{ login: `es pace-${RUN}`, email: `espace-${RUN}@exemple.test` }, 'LOGIN_INVALIDE'],
+    [{ login: `format-${RUN}`, email: 'pas-un-email' }, 'EMAIL_INVALIDE'],
+    [{ login: `format-${RUN}`, name: 'A<b>', email: `format-${RUN}@exemple.test` }, 'NOM_INVALIDE'],
+    [{ login: `format-${RUN}`, name: 'x'.repeat(300), email: `format-${RUN}@exemple.test` }, 'NOM_INVALIDE'],
+  ];
+  for (const [body, code] of refusals) {
+    const r = created(await call(diane, 'POST', '/users', body));
+    assert.equal(r.status, 400, JSON.stringify(body));
+    assert.equal(r.body.code, code, JSON.stringify(body));
+  }
+  assert.equal((await keycloak('GET', `/users?username=format-${RUN}&exact=true`)).body.length, 0);
+  assert.equal((await keycloak('GET', `/users?email=court-${RUN}@exemple.test&exact=true`)).body.length, 0);
+});
 const newcomer = {};
 // P13 : Projet où le nouvel Utilisateur est affecté, avec son Activité A13.
 const p13 = (await call(diane, 'POST', '/projects', { name: `P13 ${RUN}` })).body.id;
@@ -1486,6 +1502,9 @@ await check('modification de l’Email : mêmes refus qu’à la création, rien
   const taken = await call(diane, 'PUT', `/users/${newcomer.id}/email`, { email: 'BRUNO@exemple.test' });
   assert.equal(taken.status, 409);
   assert.equal(taken.body.code, 'EMAIL_EXISTANT');
+  const malformed = await call(diane, 'PUT', `/users/${newcomer.id}/email`, { email: 'pas-un-email' });
+  assert.equal(malformed.status, 400);
+  assert.equal(malformed.body.code, 'EMAIL_INVALIDE');
   assert.equal((await keycloak('GET', `/users/${newcomer.id}`)).body.email, `change-${RUN}@exemple.test`);
   assert.equal((await query(diane, `SELECT email FROM app_user WHERE id = $1`, [newcomer.id])).rows[0].email, `change-${RUN}@exemple.test`);
   assert.equal((await call(diane, 'PUT', `/users/inconnu-${RUN}/email`, { email: `x-${RUN}@exemple.test` })).body.code, 'UTILISATEUR_INTROUVABLE');
