@@ -1124,6 +1124,11 @@ select {
   flex: 1 1 160px;
 }
 
+.historique__ajout .historique__erreur {
+  flex-basis: 100%;
+  margin: 0;
+}
+
 .historique__ajout-bouton {
   margin: var(--space-2) 0 var(--space-3) var(--space-6);
 }

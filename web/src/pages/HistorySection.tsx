@@ -1,15 +1,18 @@
 // Historique paginé des Journées précédentes (#19), repris de la source : pages
 // du plus récent au plus ancien, Journée jamais coupée (règle dans `shared/`),
 // Édition à la volée, Scission, suppression et Relancer comme pour la Journée
-// en cours. « + Ajouter une plage » ne s'ouvre que sous la Journée cliquée (E4)
-// et un refus s'affiche en notification (E5). Dates jj.mm.aaaa et heures 24 h
-// saisies au clavier (ADR-0022), lues en heure de Zurich (ADR-0012).
+// en cours. « + Ajouter une plage » ne s'ouvre que sous la Journée cliquée (E4),
+// dates pré-remplies avec cette Journée ; un refus du serveur s'affiche en
+// notification (E5), une date ou une heure illisible sur place, sous le
+// formulaire (ADR-0022). Dates jj.mm.aaaa et heures 24 h saisies au clavier,
+// lues en heure de Zurich (ADR-0012) ; les Journées s'affichent jj.mm.aaaa.
 import {
   type Day,
   type EnteredRange,
   type HistoryPageDto,
   type TimeEntryDto,
   type TimeInput,
+  formatDateInput,
   formatSeconds,
   parseEnteredRange,
 } from '@app/shared';
@@ -17,7 +20,7 @@ import { type FormEvent, useEffect, useState } from 'react';
 import { request } from '../api';
 import { EntryLine } from '../EntryLine';
 import { useLanguage } from '../i18n/i18n';
-import { useNotify, useNotifyError } from '../notifications';
+import { useNotifyError } from '../notifications';
 
 /** Couple Projet/Activité d'un groupe d'Imputations. */
 export interface ProjectActivity {
@@ -39,11 +42,12 @@ interface HistorySectionProps {
 /** Formulaire « + Ajouter une plage », ouvert sous un seul groupe d'une seule Journée. */
 interface RangeForm extends ProjectActivity, EnteredRange {
   day: Day;
+  /** Date ou heure illisible, signalée sous le formulaire. */
+  error: string | null;
 }
 
 export function HistorySection({ version, isRunning, onEditTime, onRemove, onRelaunch, onAdded, onBackToToday }: HistorySectionProps) {
   const { t } = useLanguage();
-  const notify = useNotify();
   const notifyError = useNotifyError();
 
   // Curseurs des pages visitées : la première n'en a pas ; la dernière est la page affichée.
@@ -87,7 +91,8 @@ export function HistorySection({ version, isRunning, onEditTime, onRemove, onRel
     if (!startDate || !startTime || !endDate || !endTime) return;
     const range = parseEnteredRange(form);
     if ('error' in range) {
-      notify(t(range.error === 'date' ? 'CHAMP_DATE_ERREUR_INVALIDE' : 'CHAMP_HEURE_ERREUR_INVALIDE'));
+      const error = t(range.error === 'date' ? 'CHAMP_DATE_ERREUR_INVALIDE' : 'CHAMP_HEURE_ERREUR_INVALIDE');
+      setForm((current) => (current ? { ...current, error } : current));
       return;
     }
     try {
@@ -116,7 +121,7 @@ export function HistorySection({ version, isRunning, onEditTime, onRemove, onRel
       <div className="historique__jours">
         {(page?.days ?? []).map(({ day, groups }) => (
           <div className="historique__jour" key={day}>
-            <h3 className="historique__date">{day}</h3>
+            <h3 className="historique__date">{formatDateInput(day)}</h3>
             <div className="historique__jour-corps">
               <ul className="groupes">
                 {groups.map((group) => {
@@ -218,6 +223,11 @@ export function HistorySection({ version, isRunning, onEditTime, onRemove, onRel
                               <button type="button" className="btn btn-secondary" onClick={() => setForm(null)}>
                                 {t('BOUTON_ANNULER')}
                               </button>
+                              {form.error && (
+                                <p className="banner-error historique__erreur" role="alert">
+                                  {form.error}
+                                </p>
+                              )}
                             </form>
                           ) : (
                             <button
@@ -228,10 +238,11 @@ export function HistorySection({ version, isRunning, onEditTime, onRemove, onRel
                                   day,
                                   projectId: group.projectId,
                                   activityId: group.activityId,
-                                  startDate: '',
+                                  startDate: formatDateInput(day),
                                   startTime: '',
-                                  endDate: '',
+                                  endDate: formatDateInput(day),
                                   endTime: '',
+                                  error: null,
                                 })
                               }
                             >
