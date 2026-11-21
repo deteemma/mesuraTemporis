@@ -13,7 +13,9 @@ const localhostAgent = new Agent({
     hostname.endsWith('.localhost') ? lookup('localhost', options, callback) : lookup(hostname, options, callback),
 });
 
-export default defineConfig(({ mode }) => {
+export default defineConfig(({ command, mode }) => {
+  // La compilation (image Docker, CI) n'a ni .env ni relais.
+  if (command !== 'serve') return { plugins: [react()] };
   const env = { ...loadEnv(mode, '..', ''), ...process.env };
   const apiTarget = env.API_URL ?? (env.APP_NAME ? `https://${env.APP_NAME}.localhost` : undefined);
   if (!apiTarget) throw new Error('APP_NAME absent du .env racine (ou API_URL non défini)');
