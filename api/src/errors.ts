@@ -1,5 +1,5 @@
 import { HttpException, HttpStatus } from '@nestjs/common';
-import { errorBody, type ErrorCode } from '@app/shared';
+import { type AccountActionRefusal, errorBody, type ErrorCode } from '@app/shared';
 
 /**
  * Refus métier (ADR-0021) : statut HTTP et corps `{ code, message }`, le
@@ -27,6 +27,8 @@ export const emailTaken = () => new BusinessError(HttpStatus.CONFLICT, 'EMAIL_EX
 export const loginInvalid = () => new BusinessError(HttpStatus.BAD_REQUEST, 'LOGIN_INVALIDE');
 export const emailInvalid = () => new BusinessError(HttpStatus.BAD_REQUEST, 'EMAIL_INVALIDE');
 export const nameInvalid = () => new BusinessError(HttpStatus.BAD_REQUEST, 'NOM_INVALIDE');
+/** Retrait du rôle ou suppression refusés : Compte initial ou soi-même (ADR-0018). */
+export const accountActionRefused = (code: AccountActionRefusal) => new BusinessError(HttpStatus.FORBIDDEN, code);
 
 /** Vrai si l'erreur PostgreSQL est la violation de l'index d'unicité nommé. */
 export function isUniqueViolation(error: unknown, constraint: string): boolean {

@@ -13,8 +13,8 @@ const TIMEOUT_MS = 5_000;
 /**
  * Annuaire des comptes (#11) : masque l'API d'administration de Keycloak derrière
  * une interface métier, par le compte de service « api-admin » (ADR-0018).
- * L'écran Utilisateurs (#24) y crée, modifie et supprime les comptes ; le
- * changement de rôle et le Compte initial relèvent du #25.
+ * L'écran Utilisateurs y crée, modifie et supprime les comptes (#24), et y
+ * attribue ou retire le rôle Administrateur (#25).
  *
  * Keycloak injoignable ou secret absent : l'opération échoue (erreur imprévue,
  * 500 `ERREUR_INTERNE`), et l'appelant n'agit pas sur une réponse supposée.
@@ -125,21 +125,49 @@ export class AccountDirectory {
     await ensureOk(response);
   }
 
-  private async grantAdministrator(userId: string): Promise<void> {
-    const role = await this.get(`/roles/${encodeURIComponent(APP_ADMIN_ROLE)}`);
-    await ensureOk(role);
-    const { id, name } = (await role.json()) as { id: string; name: string };
-    await ensureOk(
-      await this.send('POST', `${userPath(userId)}/role-mappings/realm`, [{ id, name }]),
-    );
+  /**
+   * Attribue le rôle Administrateur ; il prend effet au jeton suivant.
+   * Rejouable. Compte absent : `UTILISATEUR_INTROUVABLE`.
+   */
+  async grantAdministrator(userId: string): Promise<void> {
+    await this.changeAdministratorRole('POST', userId);
   }
 
-  private async account(userId: string): Promise<Account> {
+  /**
+   * Retire le rôle Administrateur puis ferme toutes les sessions du compte :
+   * le retrait prend effet aussitôt (ADR-0018). Rejouable. Compte absent :
+   * `UTILISATEUR_INTROUVABLE`.
+   */
+  async revokeAdministrator(userId: string): Promise<void> {
+    await this.changeAdministratorRole('DELETE', userId);
+    const logout = await this.send('POST', `${userPath(userId)}/logout`);
+    if (logout.status === 404) throw userNotFound();
+    await ensureOk(logout);
+  }
+
+  /** Compte tel qu'enregistré. Compte absent : `UTILISATEUR_INTROUVABLE`. */
+  async account(userId: string): Promise<Account> {
+    const account = await this.findAccount(userId);
+    if (!account) throw userNotFound();
+    return account;
+  }
+
+  /** Compte tel qu'enregistré, ou `null` s'il est absent. */
+  async findAccount(userId: string): Promise<Account | null> {
     const response = await this.get(userPath(userId));
-    if (response.status === 404) throw userNotFound();
+    if (response.status === 404) return null;
     await ensureOk(response);
     const user = (await response.json()) as { id: string; username: string; email?: string; firstName?: string };
     return { id: user.id, login: user.username, email: user.email ?? null, name: user.firstName ?? null };
+  }
+
+  private async changeAdministratorRole(method: 'POST' | 'DELETE', userId: string): Promise<void> {
+    const role = await this.get(`/roles/${encodeURIComponent(APP_ADMIN_ROLE)}`);
+    await ensureOk(role);
+    const { id, name } = (await role.json()) as { id: string; name: string };
+    const response = await this.send(method, `${userPath(userId)}/role-mappings/realm`, [{ id, name }]);
+    if (response.status === 404) throw userNotFound();
+    await ensureOk(response);
   }
 
   private get(path: string): Promise<Response> {

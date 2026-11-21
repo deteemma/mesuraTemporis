@@ -1,7 +1,9 @@
 // Écran « Utilisateurs » (Administrateur), repris de la source avec les écarts
 // du ticket #8 (variante C) : badge de rôle, case « Administrateur » à la
-// création, dialogue de suppression chiffré, refus en notification, ligne sur
-// deux niveaux. Il pilote l'Annuaire des comptes par l'API (ADR-0018).
+// création, bouton de rôle par ligne sans confirmation, dialogue de suppression
+// chiffré, refus en notification, ligne sur deux niveaux. Les actions refusées
+// (Compte initial, soi-même) restent visibles : le serveur les refuse, en
+// notification. Il pilote l'Annuaire des comptes par l'API (ADR-0018).
 // Réservé à l'Administrateur : voir App.tsx.
 import type { UserDto, UserImpactDto, UserListDto } from '@app/shared';
 import { type FormEvent, useCallback, useEffect, useState } from 'react';
@@ -120,6 +122,15 @@ function UserRow({ user, onChanged }: { user: UserDto; onChanged: () => void }) 
     }
   }
 
+  async function toggleAdministrator() {
+    try {
+      await request<void>(`${base}/administrator`, { method: user.isAdmin ? 'DELETE' : 'PUT' });
+      onChanged();
+    } catch (error) {
+      notifyError(error);
+    }
+  }
+
   async function describeDeletion(): Promise<string> {
     const impact = await request<UserImpactDto>(`${base}/impact`);
     return t('CONFIRMER_UTILISATEUR', { nom: user.name || user.login, imputations: String(impact.timeEntries) });
@@ -157,6 +168,9 @@ function UserRow({ user, onChanged }: { user: UserDto; onChanged: () => void }) 
         />
         <button type="button" className="btn btn-secondary" onClick={() => void changeEmail()}>
           {t('BOUTON_MODIFIER')}
+        </button>
+        <button type="button" className="btn btn-secondary" onClick={() => void toggleAdministrator()}>
+          {t(user.isAdmin ? 'BOUTON_RETIRER_ROLE_ADMINISTRATEUR' : 'BOUTON_RENDRE_ADMINISTRATEUR')}
         </button>
         <DeleteButton describe={describeDeletion} onConfirm={() => void remove()} />
       </div>

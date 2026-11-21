@@ -42,6 +42,19 @@ export class UsersController {
     return this.users.changeEmail(user, userId, input.email);
   }
 
+  /** Rôle Administrateur (ADR-0018) : attribué par PUT, retiré par DELETE, sans corps. */
+  @Put(':userId/administrator')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  grantAdministrator(@Param('userId') userId: string): Promise<void> {
+    return this.users.grantAdministrator(userId);
+  }
+
+  @Delete(':userId/administrator')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  revokeAdministrator(@CurrentUser() user: AuthenticatedUser, @Param('userId') userId: string): Promise<void> {
+    return this.users.revokeAdministrator(user, userId);
+  }
+
   /** Lecture d'impact avant suppression (dialogue chiffré). */
   @Get(':userId/impact')
   impact(@CurrentUser() user: AuthenticatedUser, @Param('userId') userId: string): Promise<UserImpactDto> {

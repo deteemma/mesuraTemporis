@@ -1,10 +1,10 @@
 import { Injectable } from '@nestjs/common';
-import type { CreateUserInput, UserDto, UserImpactDto, UserListDto } from '@app/shared';
+import { type AccountActionTarget, accountActionRefusal, type CreateUserInput, type UserDto, type UserImpactDto, type UserListDto } from '@app/shared';
 import { sql } from 'kysely';
 import { type Account, AccountDirectory } from '../accounts/account-directory.service.js';
 import type { AuthenticatedUser } from '../auth/authenticated-user.js';
 import { DatabaseService, type Tx } from '../db/database.service.js';
-import { emailTaken, isUniqueViolation, loginTaken, userNotFound } from '../errors.js';
+import { accountActionRefused, emailTaken, isUniqueViolation, loginTaken, userNotFound } from '../errors.js';
 
 const UNIQUE_LOGIN_INDEX = 'app_user_login_key';
 const UNIQUE_EMAIL_INDEX = 'app_user_email_key';
@@ -119,20 +119,49 @@ export class UsersService {
     });
   }
 
+  /** Attribue le rôle Administrateur ; il prend effet au jeton suivant de la personne. */
+  grantAdministrator(userId: string): Promise<void> {
+    return this.accounts.grantAdministrator(userId);
+  }
+
+  /**
+   * Retire le rôle Administrateur et ferme aussitôt les sessions de la
+   * personne. Refusé pour le Compte initial et pour soi (ADR-0018). Le Login
+   * est lu dans l'Annuaire : le Compte initial n'a pas de ligne Utilisateur
+   * avant sa première connexion.
+   */
+  async revokeAdministrator(user: AuthenticatedUser, userId: string): Promise<void> {
+    assertAccountActionAllowed(user, await this.accounts.account(userId));
+    await this.accounts.revokeAdministrator(userId);
+  }
+
   /**
    * Supprime la ligne Utilisateur (Imputations, Chronomètre compris, et
    * affectations partent en cascade), puis ferme les sessions et supprime le
    * compte de l'Annuaire, dans la même transaction : si l'Annuaire échoue, la
-   * base est rétablie. Rejouable : un compte déjà absent de l'Annuaire n'empêche
-   * pas de supprimer la ligne.
+   * base est rétablie. Refusé pour le Compte initial et pour soi (ADR-0018).
+   * Le refus passe avant « introuvable » : le Compte initial est refusé même
+   * sans ligne Utilisateur (avant sa première connexion). Rejouable : un compte
+   * déjà absent de l'Annuaire n'empêche pas de supprimer la ligne, dont le
+   * Login (recopié de l'Annuaire, non modifiable) est alors contrôlé.
    */
-  remove(user: AuthenticatedUser, userId: string): Promise<void> {
-    return this.database.asUser(user, async (tx) => {
-      const result = await tx.deleteFrom('app_user').where('id', '=', userId).executeTakeFirst();
-      if (result.numDeletedRows === 0n) throw userNotFound();
+  async remove(user: AuthenticatedUser, userId: string): Promise<void> {
+    const account = await this.accounts.findAccount(userId);
+    await this.database.asUser(user, async (tx) => {
+      const row = await tx.selectFrom('app_user').select(['id', 'login']).where('id', '=', userId).executeTakeFirst();
+      const target = account ?? row;
+      if (target) assertAccountActionAllowed(user, target);
+      if (!row) throw userNotFound();
+      await tx.deleteFrom('app_user').where('id', '=', userId).execute();
       await this.accounts.deleteAccount(userId);
     });
   }
+}
+
+/** Retrait du rôle ou suppression : 403 pour le Compte initial ou soi-même. */
+function assertAccountActionAllowed(user: AuthenticatedUser, target: AccountActionTarget): void {
+  const refusal = accountActionRefusal({ actorId: user.id, target });
+  if (refusal) throw accountActionRefused(refusal);
 }
 
 async function setEmail(tx: Tx, userId: string, email: string | null): Promise<void> {

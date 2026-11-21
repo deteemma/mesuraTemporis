@@ -79,6 +79,8 @@ export const de: Record<UiKey, string> = {
   ADMIN_PLACEHOLDER_EMAIL: 'E-Mail',
   ARIA_MODIFIER_EMAIL: 'E-Mail bearbeiten',
   BOUTON_MODIFIER: 'Ändern',
+  BOUTON_RENDRE_ADMINISTRATEUR: 'Zum Administrator machen',
+  BOUTON_RETIRER_ROLE_ADMINISTRATEUR: 'Administratorrolle entziehen',
   UTILISATEURS_AUCUN: 'Noch keine Benutzer.',
   UTILISATEURS_SANS_PROJET_BADGE: '{nombre} ohne Projekt',
   ROLE_ADMINISTRATEUR: 'Administrator',

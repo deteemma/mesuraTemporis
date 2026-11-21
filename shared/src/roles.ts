@@ -1,5 +1,6 @@
 // Rôles et permissions : écrits une seule fois ici (ADR-0002), appliqués par
 // les guards de l'API et reproduits par les politiques RLS (ADR-0006, ADR-0017).
+import type { ErrorCode } from './error-codes.js';
 
 /**
  * Rôles d'équipe de l'ADR-0006. Seul `contributor` (l'Affecté) est attribué ;
@@ -49,4 +50,27 @@ export type ProjectAction = keyof typeof PROJECT_PERMISSIONS;
 export function can(actor: ProjectActor, action: ProjectAction): boolean {
   if (actor.isAdmin) return true;
   return PROJECT_PERMISSIONS[action] === 'assigned' && actor.isAssigned;
+}
+
+/** Login du Compte initial, déclaré dans le realm (ADR-0018). */
+export const INITIAL_ACCOUNT_LOGIN = 'admin';
+
+/** Compte visé par un retrait du rôle Administrateur ou une suppression. */
+export interface AccountActionTarget {
+  id: string;
+  login: string;
+}
+
+/**
+ * Refus d'un retrait du rôle Administrateur ou d'une suppression de compte
+ * (ADR-0018), ou `null` si l'action est permise. Le Compte initial se contrôle
+ * avant l'action sur soi (#11) : le Compte initial qui se vise est refusé comme
+ * Compte initial.
+ */
+export type AccountActionRefusal = Extract<ErrorCode, 'UTILISATEUR_COMPTE_INITIAL_PROTEGE' | 'UTILISATEUR_ACTION_SUR_SOI_INTERDITE'>;
+
+export function accountActionRefusal(action: { actorId: string; target: AccountActionTarget }): AccountActionRefusal | null {
+  if (action.target.login === INITIAL_ACCOUNT_LOGIN) return 'UTILISATEUR_COMPTE_INITIAL_PROTEGE';
+  if (action.target.id === action.actorId) return 'UTILISATEUR_ACTION_SUR_SOI_INTERDITE';
+  return null;
 }

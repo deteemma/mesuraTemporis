@@ -78,6 +78,8 @@ export const fr = {
   ADMIN_PLACEHOLDER_EMAIL: 'Email',
   ARIA_MODIFIER_EMAIL: "Modifier l'Email",
   BOUTON_MODIFIER: 'Modifier',
+  BOUTON_RENDRE_ADMINISTRATEUR: 'Rendre administrateur',
+  BOUTON_RETIRER_ROLE_ADMINISTRATEUR: 'Retirer le rôle administrateur',
   UTILISATEURS_AUCUN: "Aucun Utilisateur pour l'instant.",
   UTILISATEURS_SANS_PROJET_BADGE: '{nombre} sans Projet',
   ROLE_ADMINISTRATEUR: 'administrateur',
