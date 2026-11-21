@@ -1,7 +1,7 @@
 // Écran « Projets » (Administrateur), repris de la source avec les écarts du
 // ticket #8 : dialogue de suppression chiffré, refus en notification, marges
 // intérieures. Réservé à l'Administrateur (E25) : voir App.tsx.
-import type { ProjectImpactDto, ProjectSummaryDto, UserSummaryDto } from '@app/shared';
+import type { ProjectImpactDto, ProjectSummaryDto, UserListDto, UserSummaryDto } from '@app/shared';
 import { type FormEvent, useCallback, useEffect, useState } from 'react';
 import { request } from '../api';
 import { DeleteButton } from '../DeleteButton';
@@ -29,12 +29,12 @@ export function ProjectsPage() {
     };
   }, [version, notifyError]);
 
-  // Tant que l'écran Utilisateurs n'existe pas, la liste « Affecter » propose
-  // les Utilisateurs déjà connus de l'application (#14).
+  // La liste « Affecter » propose tous les Utilisateurs, y compris ceux créés
+  // depuis l'écran Utilisateurs qui ne se sont pas encore connectés.
   useEffect(() => {
     let active = true;
-    request<UserSummaryDto[]>('/users').then((list) => {
-      if (active) setUsers(list);
+    request<UserListDto>('/users').then((list) => {
+      if (active) setUsers(list.users);
     }, notifyError);
     return () => {
       active = false;

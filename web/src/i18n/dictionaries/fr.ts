@@ -72,6 +72,8 @@ export const fr = {
   ARIA_CHOISIR_UTILISATEUR_AFFECTER: 'Choisir un Utilisateur à affecter',
   BOUTON_AFFECTER: 'Affecter',
   STATUT_ACTIF: 'actif',
+  ADMIN_PLACEHOLDER_LOGIN: 'Login',
+  ADMIN_CASE_ADMINISTRATEUR: 'Administrateur',
   ADMIN_PLACEHOLDER_NOM: 'Nom',
   ADMIN_PLACEHOLDER_EMAIL: 'Email',
   ARIA_MODIFIER_EMAIL: "Modifier l'Email",
@@ -88,6 +90,7 @@ export const fr = {
   CONFIRMER_TITRE: 'Confirmer la suppression',
   CONFIRMER_PROJET: 'Supprimer le Projet « {nom} » ? Ses {activites} Activités et les {imputations} Imputations associées seront supprimées définitivement.',
   CONFIRMER_ACTIVITE: "Supprimer l'Activité « {nom} » ? Les {imputations} Imputations associées seront supprimées définitivement.",
+  CONFIRMER_UTILISATEUR: "Supprimer l'Utilisateur « {nom} » ? Son compte de connexion et ses {imputations} Imputations seront supprimés définitivement.",
 };
 
 export type UiKey = keyof typeof fr;

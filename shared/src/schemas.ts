@@ -170,6 +170,52 @@ export interface EditedTimeEntryDto {
   split: TimeEntryDto | null;
 }
 
+const requiredTrimmed = (value: ErrorCode) => z.string(code(value)).trim().min(1, code(value));
+
+/** Email d'un Utilisateur : obligatoire, à la création comme à la modification (ADR-0018). */
+export const userEmailSchema = requiredTrimmed('EMAIL_REQUIS');
+
+/**
+ * Création d'un Utilisateur par l'Administrateur (ADR-0018) : Login et Email
+ * obligatoires, Nom facultatif (vide = pas de Nom), case « Administrateur ».
+ * Le mot de passe temporaire est le Login : il ne se saisit pas.
+ */
+export const createUserSchema = z.object({
+  login: requiredTrimmed('LOGIN_REQUIS'),
+  name: z
+    .string()
+    .trim()
+    .optional()
+    .transform((name) => name || null),
+  email: userEmailSchema,
+  isAdmin: z.boolean().default(false),
+});
+export type CreateUserInput = z.infer<typeof createUserSchema>;
+
+/** Modification de l'Email ; Login et Nom ne se modifient pas (#11). */
+export const updateUserEmailSchema = z.object({ email: userEmailSchema });
+export type UpdateUserEmailInput = z.infer<typeof updateUserEmailSchema>;
+
+/** Utilisateur de l'écran Utilisateurs ; `isAdmin` vient de l'Annuaire des comptes. */
+export interface UserDto {
+  id: string;
+  login: string;
+  name: string | null;
+  email: string | null;
+  isAdmin: boolean;
+}
+
+/** Écran Utilisateurs : tous les Utilisateurs par Login, et combien n'ont aucune affectation. */
+export interface UserListDto {
+  users: UserDto[];
+  withoutProject: number;
+}
+
+/** Lecture d'impact avant la suppression d'un Utilisateur (dialogue chiffré, E18). */
+export interface UserImpactDto {
+  timeEntries: number;
+}
+
 /** Utilisateur tel que proposé à l'affectation et listé dans une équipe (par Login). */
 export interface UserSummaryDto {
   id: string;

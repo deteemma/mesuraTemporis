@@ -73,6 +73,8 @@ export const en: Record<UiKey, string> = {
   ARIA_CHOISIR_UTILISATEUR_AFFECTER: 'Choose a User to assign',
   BOUTON_AFFECTER: 'Assign',
   STATUT_ACTIF: 'active',
+  ADMIN_PLACEHOLDER_LOGIN: 'Login',
+  ADMIN_CASE_ADMINISTRATEUR: 'Administrator',
   ADMIN_PLACEHOLDER_NOM: 'Name',
   ADMIN_PLACEHOLDER_EMAIL: 'Email',
   ARIA_MODIFIER_EMAIL: 'Edit the Email',
@@ -89,6 +91,7 @@ export const en: Record<UiKey, string> = {
   CONFIRMER_TITRE: 'Confirm deletion',
   CONFIRMER_PROJET: 'Delete project "{nom}"? Its {activites} activities and the {imputations} related time entries will be permanently deleted.',
   CONFIRMER_ACTIVITE: 'Delete activity "{nom}"? The {imputations} related time entries will be permanently deleted.',
+  CONFIRMER_UTILISATEUR: 'Delete user "{nom}"? Their sign-in account and their {imputations} time entries will be permanently deleted.',
 };
 
 // Codes d'erreur (ADR-0021) : l'indexation par ErrorCode garantit, à la

@@ -73,6 +73,8 @@ export const de: Record<UiKey, string> = {
   ARIA_CHOISIR_UTILISATEUR_AFFECTER: 'Einen Benutzer zum Zuweisen auswählen',
   BOUTON_AFFECTER: 'Zuweisen',
   STATUT_ACTIF: 'aktiv',
+  ADMIN_PLACEHOLDER_LOGIN: 'Login',
+  ADMIN_CASE_ADMINISTRATEUR: 'Administrator',
   ADMIN_PLACEHOLDER_NOM: 'Name',
   ADMIN_PLACEHOLDER_EMAIL: 'E-Mail',
   ARIA_MODIFIER_EMAIL: 'E-Mail bearbeiten',
@@ -89,6 +91,7 @@ export const de: Record<UiKey, string> = {
   CONFIRMER_TITRE: 'Löschen bestätigen',
   CONFIRMER_PROJET: 'Projekt „{nom}“ löschen? Seine {activites} Aktivitäten und die {imputations} zugehörigen Einträge werden endgültig gelöscht.',
   CONFIRMER_ACTIVITE: 'Aktivität „{nom}“ löschen? Die {imputations} zugehörigen Einträge werden endgültig gelöscht.',
+  CONFIRMER_UTILISATEUR: 'Benutzer „{nom}“ löschen? Sein Anmeldekonto und seine {imputations} Einträge werden endgültig gelöscht.',
 };
 
 // Codes d'erreur (ADR-0021) : l'indexation par ErrorCode garantit, à la

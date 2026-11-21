@@ -73,6 +73,8 @@ export const it: Record<UiKey, string> = {
   ARIA_CHOISIR_UTILISATEUR_AFFECTER: 'Scegli un Utente da assegnare',
   BOUTON_AFFECTER: 'Assegna',
   STATUT_ACTIF: 'attivo',
+  ADMIN_PLACEHOLDER_LOGIN: 'Login',
+  ADMIN_CASE_ADMINISTRATEUR: 'Amministratore',
   ADMIN_PLACEHOLDER_NOM: 'Nome',
   ADMIN_PLACEHOLDER_EMAIL: 'Email',
   ARIA_MODIFIER_EMAIL: "Modifica l'Email",
@@ -89,6 +91,7 @@ export const it: Record<UiKey, string> = {
   CONFIRMER_TITRE: 'Conferma eliminazione',
   CONFIRMER_PROJET: 'Eliminare il Progetto «{nom}»? Le sue {activites} Attività e le {imputations} voci associate saranno eliminate definitivamente.',
   CONFIRMER_ACTIVITE: "Eliminare l'Attività «{nom}»? Le {imputations} voci associate saranno eliminate definitivamente.",
+  CONFIRMER_UTILISATEUR: "Eliminare l'Utente «{nom}»? Il suo account di accesso e le sue {imputations} voci saranno eliminati definitivamente.",
 };
 
 // Codes d'erreur (ADR-0021) : l'indexation par ErrorCode garantit, à la

@@ -668,6 +668,51 @@ select {
   margin-top: var(--space-3);
 }
 
+/* Écran Utilisateurs (variante C de prototype/administration, E20) : ligne sur
+   deux niveaux, identité et rôle en haut, actions en dessous ; badges alignés. */
+
+.role-checkbox {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--text-base);
+  white-space: nowrap;
+}
+
+.user-row {
+  padding: var(--space-4) 0;
+  gap: var(--space-4);
+}
+
+.user-row__identity {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1 1 220px;
+  min-width: 200px;
+  overflow-wrap: anywhere;
+}
+
+.user-row > .badge {
+  min-width: 110px;
+  justify-content: center;
+}
+
+.badge--admin {
+  background: var(--color-accent-soft);
+  color: var(--color-accent);
+}
+
+.user-row > .resource-list__actions {
+  flex-basis: 100%;
+  justify-content: flex-start;
+  margin-left: 0;
+}
+
+.user-row > .resource-list__actions .field {
+  flex: 0 1 220px;
+}
+
 /* Dialogue de confirmation chiffré (E18) */
 
 .dialog-backdrop {

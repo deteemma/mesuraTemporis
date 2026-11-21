@@ -22,3 +22,12 @@ export const activityNameDuplicate = () => new BusinessError(HttpStatus.CONFLICT
 export const timeEntryNotFound = () => new BusinessError(HttpStatus.NOT_FOUND, 'IMPUTATION_INTROUVABLE');
 export const noActiveTimer = () => new BusinessError(HttpStatus.NOT_FOUND, 'AUCUN_CHRONO_ACTIF');
 export const endBeforeStart = () => new BusinessError(HttpStatus.BAD_REQUEST, 'IMPUTATION_FIN_AVANT_DEBUT');
+export const loginTaken = () => new BusinessError(HttpStatus.CONFLICT, 'LOGIN_EXISTANT');
+export const emailTaken = () => new BusinessError(HttpStatus.CONFLICT, 'EMAIL_EXISTANT');
+
+/** Vrai si l'erreur PostgreSQL est la violation de l'index d'unicité nommé. */
+export function isUniqueViolation(error: unknown, constraint: string): boolean {
+  if (typeof error !== 'object' || error === null) return false;
+  const { code, constraint: name } = error as { code?: unknown; constraint?: unknown };
+  return code === '23505' && name === constraint;
+}

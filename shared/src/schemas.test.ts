@@ -2,11 +2,13 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   createActivitySchema,
+  createUserSchema,
   createProjectSchema,
   inlineEditSchema,
   manualEntrySchema,
   renameActivitySchema,
   reportRangeSchema,
+  updateUserEmailSchema,
 } from './schemas.js';
 
 const refusal = (input: unknown) => createProjectSchema.safeParse(input).error?.issues[0]?.message;
@@ -104,4 +106,43 @@ test('une plage sans « Du », sans « Au » ou illisible est refusée avec PLAG
   assert.equal(rangeRefusal({ from: '2026-01-01' }), 'PLAGE_DATES_REQUISE');
   assert.equal(rangeRefusal({ from: '05.01.2026', to: '2026-01-31' }), 'PLAGE_DATES_REQUISE');
   assert.equal(rangeRefusal({ from: '2026-02-31', to: '2026-03-01' }), 'PLAGE_DATES_REQUISE');
+});
+
+const userRefusal = (input: unknown) => createUserSchema.safeParse(input).error?.issues[0]?.message;
+
+test('un Utilisateur se crée par Login, Nom facultatif, Email et case « Administrateur », espaces de bord retirés', () => {
+  assert.deepEqual(createUserSchema.parse({ login: ' emma ', name: ' Emma ', email: ' emma@exemple.test ', isAdmin: true }), {
+    login: 'emma',
+    name: 'Emma',
+    email: 'emma@exemple.test',
+    isAdmin: true,
+  });
+});
+
+test('sans Nom ni case cochée, un Utilisateur naît sans Nom et non Administrateur', () => {
+  assert.deepEqual(createUserSchema.parse({ login: 'emma', email: 'emma@exemple.test' }), {
+    login: 'emma',
+    name: null,
+    email: 'emma@exemple.test',
+    isAdmin: false,
+  });
+  assert.equal(createUserSchema.parse({ login: 'emma', name: '  ', email: 'e@x.test' }).name, null);
+});
+
+test('un Login absent, vide ou fait d’espaces est refusé avec LOGIN_REQUIS, avant l’Email', () => {
+  assert.equal(userRefusal({ email: 'e@x.test' }), 'LOGIN_REQUIS');
+  assert.equal(userRefusal({ login: ' ', email: 'e@x.test' }), 'LOGIN_REQUIS');
+  assert.equal(userRefusal({}), 'LOGIN_REQUIS');
+});
+
+test('un Email absent, vide ou fait d’espaces est refusé avec EMAIL_REQUIS', () => {
+  assert.equal(userRefusal({ login: 'emma' }), 'EMAIL_REQUIS');
+  assert.equal(userRefusal({ login: 'emma', email: '  ' }), 'EMAIL_REQUIS');
+});
+
+test('la modification de l’Email a les mêmes refus qu’à la création : EMAIL_REQUIS', () => {
+  assert.deepEqual(updateUserEmailSchema.parse({ email: ' Emma@Exemple.test ' }), { email: 'Emma@Exemple.test' });
+  for (const input of [{}, { email: '' }, { email: ' ' }]) {
+    assert.equal(updateUserEmailSchema.safeParse(input).error?.issues[0]?.message, 'EMAIL_REQUIS');
+  }
 });

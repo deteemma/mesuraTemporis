@@ -197,9 +197,9 @@ await check('nom de Projet sans limite de longueur', async () => {
 await check('diane liste les Utilisateurs connus de l’application (par Login)', async () => {
   const r = await call(diane, 'GET', '/users');
   assert.equal(r.status, 200);
-  const logins = r.body.map((u) => u.login);
+  const logins = r.body.users.map((u) => u.login);
   for (const l of ['alice', 'bruno', 'chloe', 'diane']) assert.ok(logins.includes(l), l);
-  assert.deepEqual(r.body.find((u) => u.login === 'alice'), { id: alice.sub, login: 'alice' });
+  assert.equal(r.body.users.find((u) => u.login === 'alice').id, alice.sub);
 });
 await check('diane affecte alice à P3 ; affecter une seconde fois est sans effet', async () => {
   assert.equal((await call(diane, 'PUT', `/projects/${p3}/members/${alice.sub}`)).status, 204);
@@ -1346,12 +1346,208 @@ await check('chloé (non affectée) exporte une feuille sans ces lignes ; sans �
   assert.equal(JSON.parse(refused.body.toString()).code, 'PLAGE_DATES_REQUISE');
 });
 
+console.log('\nÉcran Utilisateurs : Annuaire des comptes (Keycloak) et base');
+// Accès direct à l'Annuaire par le compte de service, pour observer Keycloak.
+const KEYCLOAK_ADMIN = env.OIDC_JWKS_URL.replace(/\/realms\/([^/]+)\/protocol\/openid-connect\/certs$/, '/admin/realms/$1');
+const keycloak = async (method, path, body) => {
+  const tokenResponse = await fetch(TOKEN_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({ grant_type: 'client_credentials', client_id: 'api-admin', client_secret: env.KEYCLOAK_ADMIN_CLIENT_SECRET }),
+  });
+  const { access_token } = await tokenResponse.json();
+  const response = await fetch(`${KEYCLOAK_ADMIN}${path}`, {
+    method,
+    headers: { Authorization: `Bearer ${access_token}`, ...(body ? { 'Content-Type': 'application/json' } : {}) },
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  const text = await response.text();
+  return { status: response.status, body: text ? JSON.parse(text) : undefined };
+};
+const passwordGrant = (username, password) =>
+  fetch(TOKEN_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({ grant_type: 'password', client_id: 'tests', username, password }),
+  });
+const usersList = async () => (await call(diane, 'GET', '/users')).body;
+// Comptes créés par ce contrôle, supprimés de Keycloak et de la base au nettoyage.
+const createdAccounts = [];
+const created = (r) => {
+  if (r.status === 201) createdAccounts.push(r.body.id);
+  return r;
+};
+
+await check('alice (non Administrateur) : 403 ACCES_REFUSE sur la liste, la création, l’Email, la lecture d’impact et la suppression', async () => {
+  const attempts = [
+    ['GET', '/users'],
+    ['POST', '/users', { login: `pirate-${RUN}`, email: `pirate-${RUN}@exemple.test` }],
+    ['PUT', `/users/${bruno.sub}/email`, { email: `pirate-${RUN}@exemple.test` }],
+    ['GET', `/users/${bruno.sub}/impact`],
+    ['DELETE', `/users/${bruno.sub}`],
+  ];
+  for (const [method, path, body] of attempts) {
+    const r = await call(alice, method, path, body);
+    assert.equal(r.status, 403, `${method} ${path}`);
+    assert.equal(r.body.code, 'ACCES_REFUSE', `${method} ${path}`);
+  }
+  assert.equal((await keycloak('GET', `/users?username=pirate-${RUN}&exact=true`)).body.length, 0);
+  assert.equal((await keycloak('GET', `/users/${bruno.sub}`)).body.email, 'bruno@exemple.test');
+});
+await check('diane liste les Utilisateurs par Login : Login, Nom, Email et rôle lu dans l’Annuaire', async () => {
+  const { users } = await usersList();
+  assert.deepEqual(users.find((u) => u.login === 'alice'), { id: alice.sub, login: 'alice', name: 'Alice', email: 'alice@exemple.test', isAdmin: false });
+  assert.equal(users.find((u) => u.login === 'diane').isAdmin, true);
+  const logins = users.map((u) => u.login);
+  assert.deepEqual(logins, [...logins].sort());
+});
+await check('le badge « sans Projet » compte les Utilisateurs sans aucune affectation', async () => {
+  const expected = await query(diane, `SELECT count(*)::int AS n FROM app_user u WHERE NOT EXISTS (SELECT 1 FROM project_member m WHERE m.user_id = u.id)`);
+  assert.equal((await usersList()).withoutProject, expected.rows[0].n);
+});
+await check('création : Login ou Email manquant → 400 LOGIN_REQUIS / EMAIL_REQUIS ; rien n’est créé', async () => {
+  const noLogin = created(await call(diane, 'POST', '/users', { login: '  ', email: `vide-${RUN}@exemple.test` }));
+  assert.equal(noLogin.status, 400);
+  assert.equal(noLogin.body.code, 'LOGIN_REQUIS');
+  const noEmail = created(await call(diane, 'POST', '/users', { login: `vide-${RUN}`, email: '' }));
+  assert.equal(noEmail.status, 400);
+  assert.equal(noEmail.body.code, 'EMAIL_REQUIS');
+  assert.equal((await keycloak('GET', `/users?username=vide-${RUN}&exact=true`)).body.length, 0);
+});
+await check('création : Login existant → 409 LOGIN_EXISTANT ; Email existant, casse ignorée → 409 EMAIL_EXISTANT', async () => {
+  const sameLogin = created(await call(diane, 'POST', '/users', { login: 'alice', email: `autre-${RUN}@exemple.test` }));
+  assert.equal(sameLogin.status, 409);
+  assert.equal(sameLogin.body.code, 'LOGIN_EXISTANT');
+  const sameEmail = created(await call(diane, 'POST', '/users', { login: `double-${RUN}`, email: 'ALICE@Exemple.test' }));
+  assert.equal(sameEmail.status, 409);
+  assert.equal(sameEmail.body.code, 'EMAIL_EXISTANT');
+  assert.equal((await keycloak('GET', `/users?username=double-${RUN}&exact=true`)).body.length, 0);
+});
+
+const newcomer = {};
+// P13 : Projet où le nouvel Utilisateur est affecté, avec son Activité A13.
+const p13 = (await call(diane, 'POST', '/projects', { name: `P13 ${RUN}` })).body.id;
+const a13 = (await inDb(diane, (q) => q(`INSERT INTO activity (id, project_id, name, normalized_name) VALUES (gen_random_uuid(), $1, 'Accueil', 'accueil') RETURNING id`, [p13]), { commit: true })).rows[0].id;
+await check('diane crée un Utilisateur : compte Keycloak et ligne Utilisateur aussitôt, non Administrateur', async () => {
+  const before = (await usersList()).withoutProject;
+  const r = created(await call(diane, 'POST', '/users', { login: `nouveau-${RUN}`, name: ' Nouveau ', email: `Nouveau-${RUN}@Exemple.test` }));
+  assert.equal(r.status, 201, JSON.stringify(r.body));
+  newcomer.id = r.body.id;
+  assert.deepEqual(r.body, { id: newcomer.id, login: `nouveau-${RUN}`, name: 'Nouveau', email: `nouveau-${RUN}@exemple.test`, isAdmin: false });
+  const row = await query(diane, `SELECT login, email, display_name FROM app_user WHERE id = $1`, [newcomer.id]);
+  assert.deepEqual(row.rows, [{ login: `nouveau-${RUN}`, email: `nouveau-${RUN}@exemple.test`, display_name: 'Nouveau' }]);
+  const listed = await usersList();
+  assert.equal(listed.users.find((u) => u.id === newcomer.id).isAdmin, false);
+  assert.equal(listed.withoutProject, before + 1);
+});
+await check('le nouvel Utilisateur se connecte avec Login = mot de passe, mais doit d’abord le changer', async () => {
+  const wrong = await passwordGrant(`nouveau-${RUN}`, 'mauvais');
+  assert.equal((await wrong.json()).error_description, 'Invalid user credentials');
+  const first = await passwordGrant(`nouveau-${RUN}`, `nouveau-${RUN}`);
+  assert.equal(first.status, 400);
+  assert.equal((await first.json()).error_description, 'Account is not fully set up');
+  assert.deepEqual((await keycloak('GET', `/users/${newcomer.id}`)).body.requiredActions, ['UPDATE_PASSWORD']);
+});
+await check('un Login saisi en majuscules est enregistré en minuscules, et le mot de passe temporaire reste égal au Login', async () => {
+  const r = created(await call(diane, 'POST', '/users', { login: `Majuscule-${RUN}`, email: `majuscule-${RUN}@exemple.test` }));
+  assert.equal(r.status, 201, JSON.stringify(r.body));
+  assert.equal(r.body.login, `majuscule-${RUN}`);
+  const first = await passwordGrant(`majuscule-${RUN}`, `majuscule-${RUN}`);
+  assert.equal((await first.json()).error_description, 'Account is not fully set up');
+});
+await check('il est affectable avant sa première connexion ; le badge « sans Projet » le retire', async () => {
+  const before = (await usersList()).withoutProject;
+  assert.equal((await call(diane, 'PUT', `/projects/${p13}/members/${newcomer.id}`)).status, 204);
+  assert.ok((await call(diane, 'GET', `/projects/${p13}/members`)).body.some((m) => m.id === newcomer.id));
+  assert.equal((await usersList()).withoutProject, before - 1);
+});
+await check('créé avec la case « Administrateur » cochée, il est Administrateur', async () => {
+  const r = created(await call(diane, 'POST', '/users', { login: `chef-${RUN}`, email: `chef-${RUN}@exemple.test`, isAdmin: true }));
+  assert.equal(r.status, 201, JSON.stringify(r.body));
+  assert.equal(r.body.isAdmin, true);
+  assert.equal(r.body.name, null);
+  assert.equal((await usersList()).users.find((u) => u.id === r.body.id).isAdmin, true);
+  const roles = (await keycloak('GET', `/users/${r.body.id}/role-mappings/realm`)).body.map((role) => role.name);
+  assert.ok(roles.includes('administrateur'));
+});
+await check('modification de l’Email : répercutée dans Keycloak et en base (en minuscules), Nom conservé', async () => {
+  const r = await call(diane, 'PUT', `/users/${newcomer.id}/email`, { email: ` Change-${RUN}@Exemple.test ` });
+  assert.equal(r.status, 204, JSON.stringify(r.body));
+  const account = (await keycloak('GET', `/users/${newcomer.id}`)).body;
+  assert.equal(account.email, `change-${RUN}@exemple.test`);
+  assert.equal(account.firstName, 'Nouveau');
+  const row = await query(diane, `SELECT email FROM app_user WHERE id = $1`, [newcomer.id]);
+  assert.equal(row.rows[0].email, `change-${RUN}@exemple.test`);
+});
+await check('modification de l’Email : mêmes refus qu’à la création, rien n’est modifié ; Utilisateur inconnu → 404', async () => {
+  const empty = await call(diane, 'PUT', `/users/${newcomer.id}/email`, { email: ' ' });
+  assert.equal(empty.status, 400);
+  assert.equal(empty.body.code, 'EMAIL_REQUIS');
+  const taken = await call(diane, 'PUT', `/users/${newcomer.id}/email`, { email: 'BRUNO@exemple.test' });
+  assert.equal(taken.status, 409);
+  assert.equal(taken.body.code, 'EMAIL_EXISTANT');
+  assert.equal((await keycloak('GET', `/users/${newcomer.id}`)).body.email, `change-${RUN}@exemple.test`);
+  assert.equal((await query(diane, `SELECT email FROM app_user WHERE id = $1`, [newcomer.id])).rows[0].email, `change-${RUN}@exemple.test`);
+  assert.equal((await call(diane, 'PUT', `/users/inconnu-${RUN}/email`, { email: `x-${RUN}@exemple.test` })).body.code, 'UTILISATEUR_INTROUVABLE');
+});
+await check('un échec de la base après la création Keycloak ne laisse pas de compte orphelin', async () => {
+  // Une ligne Utilisateur sans compte Keycloak occupe le Login : Keycloak accepte
+  // le compte, la base le refuse, et le compte doit être retiré de Keycloak.
+  await inDb(diane, (q) => q(`INSERT INTO app_user (id, login) VALUES ($1, $1)`, [`fantome-${RUN}`]), { commit: true });
+  try {
+    const r = created(await call(diane, 'POST', '/users', { login: `fantome-${RUN}`, email: `fantome-${RUN}@exemple.test` }));
+    assert.equal(r.status, 409);
+    assert.equal(r.body.code, 'LOGIN_EXISTANT');
+    assert.equal((await keycloak('GET', `/users?username=fantome-${RUN}&exact=true`)).body.length, 0);
+  } finally {
+    await inDb(diane, (q) => q(`DELETE FROM app_user WHERE id = $1`, [`fantome-${RUN}`]), { commit: true });
+  }
+});
+await check('suppression : la lecture d’impact chiffre ses Imputations, Chronomètre compris', async () => {
+  const actor = { sub: newcomer.id, isAdmin: false };
+  await addEntry(actor, p13, a13);
+  await inDb(actor, (q) => q(`INSERT INTO time_entry (id, user_id, project_id, activity_id, started_at) VALUES (gen_random_uuid(), $1, $2, $3, now())`, [newcomer.id, p13, a13]), { commit: true });
+  assert.deepEqual((await call(diane, 'GET', `/users/${newcomer.id}/impact`)).body, { timeEntries: 2 });
+  assert.equal((await call(diane, 'GET', `/users/inconnu-${RUN}/impact`)).body.code, 'UTILISATEUR_INTROUVABLE');
+});
+await check('suppression : sessions fermées, compte Keycloak supprimé, Imputations et affectations emportées', async () => {
+  // Mot de passe définitif posé directement dans Keycloak pour ouvrir une session.
+  await keycloak('PUT', `/users/${newcomer.id}/reset-password`, { type: 'password', value: 'Test1234!', temporary: false });
+  await keycloak('PUT', `/users/${newcomer.id}`, { ...(await keycloak('GET', `/users/${newcomer.id}`)).body, requiredActions: [] });
+  const session = await passwordGrant(`nouveau-${RUN}`, 'Test1234!');
+  assert.equal(session.status, 200, 'session impossible à ouvrir');
+  const { refresh_token } = await session.json();
+
+  assert.equal((await call(diane, 'DELETE', `/users/${newcomer.id}`)).status, 204);
+
+  const refresh = await fetch(TOKEN_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({ grant_type: 'refresh_token', client_id: 'tests', refresh_token }),
+  });
+  assert.equal(refresh.status, 400, 'la session aurait dû être fermée');
+  assert.equal((await keycloak('GET', `/users/${newcomer.id}`)).status, 404);
+  const left = await query(diane, `SELECT (SELECT count(*) FROM app_user WHERE id = $1)::int AS users,
+    (SELECT count(*) FROM time_entry WHERE user_id = $1)::int AS entries,
+    (SELECT count(*) FROM project_member WHERE user_id = $1)::int AS members`, [newcomer.id]);
+  assert.deepEqual(left.rows[0], { users: 0, entries: 0, members: 0 });
+  assert.equal((await call(diane, 'DELETE', `/users/${newcomer.id}`)).body.code, 'UTILISATEUR_INTROUVABLE');
+});
+await check('suppression rejouable : un compte déjà absent de Keycloak n’empêche pas de supprimer l’Utilisateur', async () => {
+  const r = created(await call(diane, 'POST', '/users', { login: `rejeu-${RUN}`, email: `rejeu-${RUN}@exemple.test` }));
+  assert.equal(r.status, 201, JSON.stringify(r.body));
+  assert.equal((await keycloak('DELETE', `/users/${r.body.id}`)).status, 204);
+  assert.equal((await call(diane, 'DELETE', `/users/${r.body.id}`)).status, 204);
+  assert.equal((await query(diane, `SELECT id FROM app_user WHERE id = $1`, [r.body.id])).rowCount, 0);
+});
+
 console.log('\nNettoyage');
 await check('suppression des Projets et Utilisateurs de test', async () => {
   await inDb(diane, async (q) => {
-    await q(`DELETE FROM app_user WHERE id = $1`, [`test-cascade-${RUN}`]);
-    await q(`DELETE FROM project WHERE id = ANY($1) OR name = $2`, [[data.p1, data.p2, p3, p4, fixture.p5, fixture.p6, removal.p7, removal.p8, mine.p9, mine.p10, rep.p11, rep.p12].filter(Boolean), 'L'.repeat(1000)]);
+    await q(`DELETE FROM app_user WHERE id = $1 OR id = ANY($2)`, [`test-cascade-${RUN}`, createdAccounts]);
+    await q(`DELETE FROM project WHERE id = ANY($1) OR name = $2`, [[data.p1, data.p2, p3, p4, fixture.p5, fixture.p6, removal.p7, removal.p8, mine.p9, mine.p10, rep.p11, rep.p12, p13].filter(Boolean), 'L'.repeat(1000)]);
   }, { commit: true });
+  for (const id of createdAccounts) await keycloak('DELETE', `/users/${id}`);
 });
 
 console.log(failures ? `\n${failures} échec(s).` : '\nTous les contrôles sont passés.');

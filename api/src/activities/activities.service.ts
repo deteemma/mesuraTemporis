@@ -12,7 +12,7 @@ import { sql } from 'kysely';
 import { z } from 'zod';
 import type { AuthenticatedUser } from '../auth/authenticated-user.js';
 import { DatabaseService, type Tx } from '../db/database.service.js';
-import { activityNameDuplicate, activityNotFound, projectNotFound } from '../errors.js';
+import { activityNameDuplicate, activityNotFound, isUniqueViolation, projectNotFound } from '../errors.js';
 
 const uuid = z.uuid();
 
@@ -170,12 +170,6 @@ async function withUniqueName<T>(work: () => Promise<T>): Promise<T> {
     if (isUniqueViolation(error, UNIQUE_NAME_INDEX)) throw activityNameDuplicate();
     throw error;
   }
-}
-
-function isUniqueViolation(error: unknown, constraint: string): boolean {
-  if (typeof error !== 'object' || error === null) return false;
-  const { code, constraint: name } = error as { code?: unknown; constraint?: unknown };
-  return code === '23505' && name === constraint;
 }
 
 function toDto(row: { id: string; project_id: string; name: string }): ActivityDto {
