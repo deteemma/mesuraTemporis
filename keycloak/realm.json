@@ -55,6 +55,18 @@
           "userLabel": "initial"
         }
       ]
+    },
+    {
+      "username": "service-account-api-admin",
+      "enabled": true,
+      "serviceAccountClientId": "api-admin",
+      "clientRoles": {
+        "realm-management": [
+          "view-users",
+          "manage-users",
+          "view-realm"
+        ]
+      }
     }
   ],
   "clients": [
@@ -116,6 +128,17 @@
           }
         }
       ]
+    },
+    {
+      "clientId": "api-admin",
+      "name": "API : Annuaire des comptes (compte de service, ADR-0018)",
+      "publicClient": false,
+      "clientAuthenticatorType": "client-secret",
+      "secret": "$(env:KEYCLOAK_ADMIN_CLIENT_SECRET)",
+      "serviceAccountsEnabled": true,
+      "standardFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "implicitFlowEnabled": false
     }
   ],
   "identityProviders": [

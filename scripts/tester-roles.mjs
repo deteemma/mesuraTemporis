@@ -1044,11 +1044,101 @@ await check('Utilisateur → ses Imputations et ses affectations', async () => {
   });
 });
 
+console.log('\nRetrait d’une équipe : Chronomètre et Imputations (API et base, #20)');
+// P7 : alice, bruno et diane affectés ; P8 : bruno affecté.
+const removal = {};
+removal.p7 = (await call(diane, 'POST', '/projects', { name: `P7 ${RUN}` })).body.id;
+removal.p8 = (await call(diane, 'POST', '/projects', { name: `P8 ${RUN}` })).body.id;
+removal.a7 = (await call(diane, 'POST', `/projects/${removal.p7}/activities`, { name: 'Recette' })).body.id;
+removal.a8 = (await call(diane, 'POST', `/projects/${removal.p8}/activities`, { name: 'Recette' })).body.id;
+for (const u of [alice, bruno, diane]) await call(diane, 'PUT', `/projects/${removal.p7}/members/${u.sub}`);
+await call(diane, 'PUT', `/projects/${removal.p8}/members/${bruno.sub}`);
+for (const u of [alice, bruno, diane]) await call(u, 'POST', '/time-entries/timer/stop');
+removal.aliceEarlier = await addEntry(alice, removal.p7, removal.a7); // terminée, avant son retrait
+const endOf = async (id) => (await query(diane, `SELECT ended_at FROM time_entry WHERE id = $1`, [id])).rows[0].ended_at;
+
+await check('retrait d’un non-Administrateur : son Chronomètre sur ce Projet s’arrête à l’instant du retrait', async () => {
+  const timer = (await start(alice, { projectId: removal.p7, activityId: removal.a7 })).body.timer;
+  removal.aliceTimer = timer.id;
+  const before = Date.now();
+  assert.equal((await call(diane, 'DELETE', `/projects/${removal.p7}/members/${alice.sub}`)).status, 204);
+  const after = Date.now();
+  const ended = await endOf(timer.id);
+  assert.ok(ended, 'Chronomètre toujours en cours');
+  assert.ok(ended.getTime() >= before - 1000 && ended.getTime() <= after + 1000, `fin ${ended.toISOString()} hors de l’instant du retrait`);
+  assert.deepEqual((await call(alice, 'GET', '/time-entries/timer')).body, { timer: null });
+});
+await check('aucune notification au retrait : « Arrêter » répond ensuite AUCUN_CHRONO_ACTIF', async () => {
+  const r = await call(alice, 'POST', '/time-entries/timer/stop');
+  assert.equal(r.status, 404);
+  assert.equal(r.body.code, 'AUCUN_CHRONO_ACTIF');
+});
+await check('alice retirée voit, modifie et supprime son Imputation sur P7, avec les noms du Projet et de l’Activité', async () => {
+  const entry = (await call(alice, 'GET', '/time-entries/today')).body.find((e) => e.id === removal.aliceTimer);
+  assert.ok(entry, 'Imputation absente de la Journée');
+  assert.deepEqual({ projectName: entry.projectName, activityName: entry.activityName }, { projectName: `P7 ${RUN}`, activityName: 'Recette' });
+  assert.equal((await edit(alice, removal.aliceTimer, { startedAt: entry.startedAt })).status, 200);
+  assert.equal((await call(alice, 'DELETE', `/time-entries/${removal.aliceTimer}`)).status, 204);
+});
+await check('alice retirée : P7 quitte la recherche combinée ; démarrer, Relancer ou renommer y répond 404 PROJET_INTROUVABLE', async () => {
+  assert.deepEqual(await searchIn(alice, 'recette', [removal.p7]), []);
+  assert.equal((await start(alice, { projectId: removal.p7, activityId: removal.a7 })).body.code, 'PROJET_INTROUVABLE');
+  assert.equal((await start(alice, { projectId: removal.p7, newActivityName: 'Nouvelle' })).body.code, 'PROJET_INTROUVABLE');
+  const rename = await call(alice, 'PATCH', `/projects/${removal.p7}/activities/${removal.a7}`, { name: 'Renommée' });
+  assert.equal(rename.status, 404);
+  assert.equal(rename.body.code, 'PROJET_INTROUVABLE');
+  const typed = await manual(alice, manualBody({ projectId: removal.p7, activityId: removal.a7 }));
+  assert.equal(typed.status, 404);
+  assert.equal(typed.body.code, 'PROJET_INTROUVABLE');
+});
+await check('en base, alice retirée modifie et supprime son Imputation sur P7, mais n’en crée plus', async () => {
+  const entry = removal.aliceEarlier;
+  await inDb(alice, async (q) => {
+    assert.equal((await q(`UPDATE time_entry SET ended_at = ended_at + interval '1 minute' WHERE id = $1`, [entry])).rowCount, 1);
+    assert.equal((await q(`DELETE FROM time_entry WHERE id = $1`, [entry])).rowCount, 1);
+  });
+  await assert.rejects(
+    query(alice, `INSERT INTO time_entry (id, user_id, project_id, activity_id, started_at) VALUES (gen_random_uuid(), $1, $2, $3, now())`,
+      [alice.sub, removal.p7, removal.a7]),
+    /row-level security/,
+  );
+});
+await check('le retrait n’arrête pas un Chronomètre sur un autre Projet', async () => {
+  const timer = (await start(bruno, { projectId: removal.p8, activityId: removal.a8 })).body.timer;
+  assert.equal((await call(diane, 'DELETE', `/projects/${removal.p7}/members/${bruno.sub}`)).status, 204);
+  assert.equal(await endOf(timer.id), null);
+  await call(bruno, 'POST', '/time-entries/timer/stop');
+});
+await check('retrait d’un Administrateur : son Chronomètre continue', async () => {
+  const timer = (await start(diane, { projectId: removal.p7, activityId: removal.a7 })).body.timer;
+  assert.equal((await call(diane, 'DELETE', `/projects/${removal.p7}/members/${diane.sub}`)).status, 204);
+  assert.equal(await endOf(timer.id), null);
+  assert.equal((await call(diane, 'GET', '/time-entries/timer')).body.timer.id, timer.id);
+  await call(diane, 'POST', '/time-entries/timer/stop');
+});
+await check('retirer un Utilisateur qui n’est pas dans l’équipe est sans effet', async () => {
+  assert.equal((await call(diane, 'DELETE', `/projects/${removal.p7}/members/${alice.sub}`)).status, 204);
+});
+await check('en base, l’Administrateur retire et arrête le Chronomètre d’autrui dans une même transaction', async () => {
+  await call(diane, 'PUT', `/projects/${removal.p7}/members/${alice.sub}`);
+  const timer = (await start(alice, { projectId: removal.p7, activityId: removal.a7 })).body.timer;
+  await inDb(diane, async (q) => {
+    assert.equal((await q(`DELETE FROM project_member WHERE project_id = $1 AND user_id = $2`, [removal.p7, alice.sub])).rowCount, 1);
+    assert.equal((await q(`UPDATE time_entry SET ended_at = now() WHERE id = $1 AND ended_at IS NULL`, [timer.id])).rowCount, 1);
+  });
+  removal.aliceTimer = timer.id;
+});
+await check('en base, un Utilisateur ne retire personne ni n’arrête le Chronomètre d’autrui (sans effet)', async () => {
+  assert.equal((await query(bruno, `DELETE FROM project_member WHERE project_id = $1 AND user_id = $2`, [removal.p7, alice.sub])).rowCount, 0);
+  assert.equal((await query(bruno, `UPDATE time_entry SET ended_at = now() WHERE id = $1`, [removal.aliceTimer])).rowCount, 0);
+  await call(alice, 'POST', '/time-entries/timer/stop');
+});
+
 console.log('\nNettoyage');
 await check('suppression des Projets et Utilisateurs de test', async () => {
   await inDb(diane, async (q) => {
     await q(`DELETE FROM app_user WHERE id = $1`, [`test-cascade-${RUN}`]);
-    await q(`DELETE FROM project WHERE id = ANY($1) OR name = $2`, [[data.p1, data.p2, p3, p4, fixture.p5, fixture.p6].filter(Boolean), 'L'.repeat(1000)]);
+    await q(`DELETE FROM project WHERE id = ANY($1) OR name = $2`, [[data.p1, data.p2, p3, p4, fixture.p5, fixture.p6, removal.p7, removal.p8].filter(Boolean), 'L'.repeat(1000)]);
   }, { commit: true });
 });
 

@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { APP_GUARD } from '@nestjs/core';
+import { AccountDirectory } from './accounts/account-directory.service.js';
 import { ActivitiesController } from './activities/activities.controller.js';
 import { ActivitiesService } from './activities/activities.service.js';
 import { ActivitySearchController } from './activities/activity-search.controller.js';
@@ -28,6 +29,7 @@ import { UsersService } from './users/users.service.js';
   providers: [
     { provide: AppConfig, useFactory: () => new AppConfig() },
     DatabaseService,
+    AccountDirectory,
     OidcVerifier,
     UsersService,
     ProjectsService,

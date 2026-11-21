@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { Injectable } from '@nestjs/common';
 import type { CreateProjectInput, ProjectImpactDto, ProjectSummaryDto, UserSummaryDto } from '@app/shared';
+import { AccountDirectory } from '../accounts/account-directory.service.js';
 import type { AuthenticatedUser } from '../auth/authenticated-user.js';
 import { DatabaseService, type Tx } from '../db/database.service.js';
 import { projectNotFound, userNotFound } from '../errors.js';
@@ -12,7 +13,10 @@ import { projectNotFound, userNotFound } from '../errors.js';
  */
 @Injectable()
 export class ProjectsService {
-  constructor(private readonly database: DatabaseService) {}
+  constructor(
+    private readonly database: DatabaseService,
+    private readonly accounts: AccountDirectory,
+  ) {}
 
   /**
    * Projets visibles : tous pour l'Administrateur, sinon ceux où l'Utilisateur
@@ -115,16 +119,38 @@ export class ProjectsService {
 
   /**
    * Retire un Utilisateur de l'équipe ; sans effet s'il n'y est pas. Ses
-   * Imputations restent. L'arrêt de son Chronomètre relève du ticket #20.
+   * Imputations restent. Son Chronomètre sur ce Projet s'arrête à l'instant du
+   * retrait, dans la même transaction, sauf s'il est Administrateur : il garde
+   * le droit de saisir partout (ADR-0017, E9). La base ne connaît pas ce rôle,
+   * l'Annuaire des comptes le donne ; s'il ne répond pas, le retrait est annulé.
    */
   unassign(user: AuthenticatedUser, projectId: string, userId: string): Promise<void> {
     return this.database.asUser(user, async (tx) => {
+      const removedAt = new Date();
       await this.assertProjectExists(tx, projectId);
       await this.assertUserExists(tx, userId);
-      await tx
+      const removed = await tx
         .deleteFrom('project_member')
         .where('project_id', '=', projectId)
         .where('user_id', '=', userId)
+        .executeTakeFirst();
+      if (removed.numDeletedRows === 0n) return;
+
+      const timer = await tx
+        .selectFrom('time_entry')
+        .select('id')
+        .where('user_id', '=', userId)
+        .where('project_id', '=', projectId)
+        .where('ended_at', 'is', null)
+        .executeTakeFirst();
+      // Appel à Keycloak dans la transaction, et seulement s'il y a un
+      // Chronomètre à arrêter : s'il échoue, le retrait est annulé.
+      if (!timer || (await this.accounts.isAdministrator(userId))) return;
+      await tx
+        .updateTable('time_entry')
+        .set({ ended_at: removedAt })
+        .where('id', '=', timer.id)
+        .where('ended_at', 'is', null)
         .execute();
     });
   }
