@@ -25,6 +25,7 @@ les identifiants de code en anglais.
 | Login | `login` | Identifiant de connexion par mot de passe, choisi par l'Administrateur, distinct de l'Email et non modifiable. Pour un compte né de Google, c'est son Email. | Identifiant email, nom d'utilisateur |
 | Email | `email` | Adresse unique d'un Utilisateur ; pivot du rattachement d'une connexion Google à un Utilisateur existant. | Adresse mail, courriel |
 | Nom | `name` | Nom affiché d'un Utilisateur, en un seul champ, facultatif. | Prénom / nom de famille |
+| Annuaire des comptes | `AccountDirectory` | Source de vérité des comptes de connexion et de leur rôle (Keycloak), interrogée par l'application. Un compte absent de l'Annuaire n'a aucun rôle. | Keycloak (dans l'interface), annuaire LDAP |
 
 ### Projets et temps
 
