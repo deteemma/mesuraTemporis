@@ -26,7 +26,9 @@ export function ReportPage() {
     const range = parseEnteredReportRange(from, to);
     if (!range) return;
     if ('error' in range) {
+      // Le Rapport précédent ne correspond plus à la saisie : il est masqué.
       setDateError(true);
+      setReport(null);
       return;
     }
     setDateError(false);

@@ -2,7 +2,7 @@
 // temps de l'Utilisateur courant sur une Journée, par Projet et Activité, en
 // secondes, Chronomètre en cours exclu. Exposée par l'API seulement, sans
 // écran (#11, note 2). Journée Europe/Zurich (E1, ADR-0012) ; lignes ordonnées
-// par le début de leur première Imputation, comme le Rapport (E23).
+// par le début de leur première Imputation (E23, étendu le 2026-11-21).
 import { type Day, dayOf } from './day.js';
 import { durationSeconds } from './durations.js';
 

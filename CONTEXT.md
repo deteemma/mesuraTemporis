@@ -52,6 +52,7 @@ les identifiants de code en anglais.
 | Durée | — | Temps écoulé entre le début et la fin d'une Imputation : à la seconde au Chronomètre, à la minute en Saisie manuelle ou Édition à la volée. | Temps imputé, temps passé |
 | Durée totale | — | Somme des Durées des Imputations terminées d'un Utilisateur sur un Projet ou une Activité, toutes dates confondues. | Total imputé |
 | Rapport | — | Agrégation des Durées des Imputations terminées sur une plage de Journées (bornes incluses), groupée par Journée puis par Utilisateur, Projet et Activité ; consultable à l'écran ou exportable en Excel. | Synthèse, résumé, export |
+| Synthèse journalière | `daily summary` | Durées des Imputations terminées de l'Utilisateur courant sur une Journée, groupées par Projet et Activité, avec leur total ; exposée par l'API seulement, sans écran. | Rapport journalier |
 | Mes projets | — | Écran listant, pour l'Utilisateur courant, les Projets et Activités où il a une Durée totale non nulle. | Mes temps |
 | Code d'erreur | — | Identifiant stable d'un refus du serveur, traduit par l'interface (ex. `IMPUTATION_FIN_AVANT_DEBUT`). | Message d'erreur |
 
