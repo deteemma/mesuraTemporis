@@ -42,6 +42,7 @@ les identifiants de code en anglais.
 | Relancer | — | Démarrer un Chronomètre aujourd'hui sur le Projet et l'Activité d'une Imputation terminée, de n'importe quel jour. L'Imputation d'origine reste inchangée. | Reprendre, redémarrer |
 | Scission | — | Découpage automatique, lors d'une Édition à la volée, d'une Imputation qui franchirait minuit : l'original est tronqué à la fin de sa Journée, une nouvelle Imputation couvre l'autre Journée. | Split, découpage |
 | Journée | — | Journée calendaire Europe/Zurich, la même pour tous les Utilisateurs. Une Imputation appartient à la Journée de son heure de début. | Jour UTC, date |
+| Historique | `history` | Liste des Imputations dans le temps. | |
 
 ### Mesures et restitution
 
