@@ -57,6 +57,7 @@ export const de: Record<UiKey, string> = {
   RAPPORT_CHAMP_AU: 'Bis',
   RAPPORT_INDICE_JOURNEE_UNIQUE: 'Leer lassen für einen Bericht über einen einzigen Tag.',
   RAPPORT_BOUTON_GENERER: 'Erstellen',
+  RAPPORT_BOUTON_EXPORTER_EXCEL: 'Nach Excel exportieren',
   RAPPORT_SUR_PERIODE: 'im Zeitraum',
   RAPPORT_MESSAGE_VIDE: 'Wählen Sie einen Zeitraum und klicken Sie auf „Erstellen", um die erfasste Zeit im Detail anzuzeigen.',
   MES_PROJETS_TOTAL_GENERAL: 'Gesamtsumme',

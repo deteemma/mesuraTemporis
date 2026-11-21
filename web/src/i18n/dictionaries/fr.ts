@@ -56,6 +56,7 @@ export const fr = {
   RAPPORT_CHAMP_AU: 'Au',
   RAPPORT_INDICE_JOURNEE_UNIQUE: "Laissez vide pour un rapport d'une seule journée.",
   RAPPORT_BOUTON_GENERER: 'Générer',
+  RAPPORT_BOUTON_EXPORTER_EXCEL: 'Exporter en Excel',
   RAPPORT_SUR_PERIODE: 'sur la période',
   RAPPORT_MESSAGE_VIDE: 'Choisissez une période puis cliquez sur « Générer » pour afficher le détail du temps imputé.',
   MES_PROJETS_TOTAL_GENERAL: 'Total général',

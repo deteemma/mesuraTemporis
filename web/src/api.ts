@@ -29,6 +29,22 @@ async function readError(response: Response): Promise<ApiError> {
 }
 
 export async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
+  const response = await send(path, init);
+  return (response.status === 204 ? undefined : await response.json()) as T;
+}
+
+/** Télécharge le fichier renvoyé par l'API sous le nom donné. */
+export async function download(path: string, fileName: string): Promise<void> {
+  const blob = await (await send(path)).blob();
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = fileName;
+  link.click();
+  URL.revokeObjectURL(url);
+}
+
+async function send(path: string, init: RequestInit = {}): Promise<Response> {
   const response = await fetch(`/api${path}`, {
     ...init,
     headers: {
@@ -43,5 +59,5 @@ export async function request<T>(path: string, init: RequestInit = {}): Promise<
     void login();
   }
   if (!response.ok) throw await readError(response);
-  return (response.status === 204 ? undefined : await response.json()) as T;
+  return response;
 }

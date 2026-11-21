@@ -10,6 +10,7 @@ import { createRequire } from 'node:module';
 
 const require = createRequire('/app/api/package.json');
 const pg = require('pg');
+const ExcelJS = require('exceljs');
 
 const env = process.env;
 const API = `http://${env.APP_NAME}-api:3000/api`;
@@ -1292,6 +1293,57 @@ await check('synthèse journalière : ses Imputations de la Journée suisse, par
   assert.ok(!summary.lines.some((l) => l.projectId === rep.p12)); // 00:30 le lendemain
   const forDiane = (await call(diane, 'GET', '/reports/daily?day=2024-06-03')).body;
   assert.ok(!forDiane.lines.some((l) => l.projectId === rep.p11)); // pas celles des autres
+});
+
+console.log('\nExport Excel du Rapport (API, #23)');
+const exportOf = async (user, query) => {
+  const response = await fetch(`${API}/reports/range/export?${new URLSearchParams(query)}`, {
+    headers: { Authorization: `Bearer ${user.token}` },
+  });
+  return { status: response.status, headers: response.headers, body: Buffer.from(await response.arrayBuffer()) };
+};
+// Feuille « Rapport » : [en-têtes, lignes des seuls Projets de ce contrôle].
+const sheetOf = async (body) => {
+  const workbook = new ExcelJS.Workbook();
+  await workbook.xlsx.load(body);
+  const sheet = workbook.getWorksheet('Rapport');
+  assert.ok(sheet, 'feuille « Rapport » absente');
+  const rows = [];
+  sheet.eachRow((row) => rows.push(row.values.slice(1)));
+  const ours = new Set([`P11 ${RUN}`, `P12 ${RUN}`]);
+  return [rows[0], rows.slice(1).filter((row) => ours.has(row[1]))];
+};
+
+await check('alice : fichier rapport-<du>-<au>.xlsx, feuille « Rapport », en-têtes français, ses seules lignes en minutes arrondies et hh:mm:ss', async () => {
+  const r = await exportOf(alice, { from: '2024-06-03', to: '2024-06-04' });
+  assert.equal(r.status, 200);
+  assert.equal(r.headers.get('content-type'), 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+  assert.equal(r.headers.get('content-disposition'), 'attachment; filename="rapport-2024-06-03-2024-06-04.xlsx"');
+  const [headers, rows] = await sheetOf(r.body);
+  assert.deepEqual(headers, ['Utilisateur', 'Projet', 'Activité', 'Journée', 'Durée (minutes)', 'Durée (hh:mm:ss)']);
+  assert.deepEqual(rows, [
+    ['alice', `P11 ${RUN}`, 'Développement', '2024-06-03', 61, '01:00:42'],
+    ['alice', `P11 ${RUN}`, 'Documentation', '2024-06-03', 30, '00:30:00'],
+    ['alice', `P12 ${RUN}`, 'Support', '2024-06-04', 45, '00:45:00'],
+  ]);
+});
+await check('diane (Administrateur) exporte tout le monde ; une seule Journée : rapport-<du>.xlsx', async () => {
+  const r = await exportOf(diane, { from: '2024-06-03', to: '2024-06-03' });
+  assert.equal(r.status, 200);
+  assert.equal(r.headers.get('content-disposition'), 'attachment; filename="rapport-2024-06-03.xlsx"');
+  const [, rows] = await sheetOf(r.body);
+  assert.deepEqual(rows.map((row) => [row[0], row[2], row[4]]), [
+    ['bruno', 'Développement', 240],
+    ['alice', 'Développement', 61],
+    ['alice', 'Documentation', 30],
+  ]);
+});
+await check('chloé (non affectée) exporte une feuille sans ces lignes ; sans « Du » : PLAGE_DATES_REQUISE', async () => {
+  const [, rows] = await sheetOf((await exportOf(chloe, { from: '2024-06-01', to: '2024-06-30' })).body);
+  assert.deepEqual(rows, []);
+  const refused = await exportOf(alice, { to: '2024-06-30' });
+  assert.equal(refused.status, 400);
+  assert.equal(JSON.parse(refused.body.toString()).code, 'PLAGE_DATES_REQUISE');
 });
 
 console.log('\nNettoyage');

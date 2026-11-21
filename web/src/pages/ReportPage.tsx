@@ -4,10 +4,11 @@
 // plus récente) avec son total et ses lignes Activité, Projet · Login, Durée en
 // hh:mm:ss. Champs date maison jj.mm.aaaa (ADR-0022, E27). L'agrégation (ordre
 // E23, Chronomètres exclus, plage inversée vide) est faite par l'API avec
-// `shared/`.
-import { type ReportDto, formatSeconds, parseEnteredReportRange } from '@app/shared';
+// `shared/`. « Exporter en Excel » télécharge le classeur de la même plage,
+// écrit par l'API (#23) ; bouton traduit, fichier en français (E22).
+import { type ReportDto, formatSeconds, parseEnteredReportRange, reportExportFileName } from '@app/shared';
 import { type FormEvent, useState } from 'react';
-import { request } from '../api';
+import { download, request } from '../api';
 import { useLanguage } from '../i18n/i18n';
 import { useNotifyError } from '../notifications';
 
@@ -21,19 +22,35 @@ export function ReportPage() {
 
   // Comme dans la source, rien n'est lancé sans « Du ». Une date illisible est
   // signalée sous le formulaire, sans appel au serveur (ADR-0022).
-  async function generate(event: FormEvent) {
-    event.preventDefault();
+  function enteredRange() {
     const range = parseEnteredReportRange(from, to);
-    if (!range) return;
+    if (!range) return null;
     if ('error' in range) {
       // Le Rapport précédent ne correspond plus à la saisie : il est masqué.
       setDateError(true);
       setReport(null);
-      return;
+      return null;
     }
     setDateError(false);
+    return range;
+  }
+
+  async function generate(event: FormEvent) {
+    event.preventDefault();
+    const range = enteredRange();
+    if (!range) return;
     try {
       setReport(await request<ReportDto>(`/reports/range?${new URLSearchParams(range)}`));
+    } catch (error) {
+      notifyError(error);
+    }
+  }
+
+  async function exportExcel() {
+    const range = enteredRange();
+    if (!range) return;
+    try {
+      await download(`/reports/range/export?${new URLSearchParams(range)}`, reportExportFileName(range));
     } catch (error) {
       notifyError(error);
     }
@@ -71,6 +88,9 @@ export function ReportPage() {
           <div className="rapport__actions">
             <button type="submit" className="btn btn-primary">
               {t('RAPPORT_BOUTON_GENERER')}
+            </button>
+            <button type="button" className="btn btn-secondary" onClick={() => void exportExcel()}>
+              {t('RAPPORT_BOUTON_EXPORTER_EXCEL')}
             </button>
           </div>
         </form>
