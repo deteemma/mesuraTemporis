@@ -4,6 +4,7 @@
 import { z } from 'zod';
 import type { ErrorCode } from './error-codes.js';
 import type { HistoryPage } from './history.js';
+import type { MyProjectsSummary } from './my-projects.js';
 import type { ProjectRole } from './roles.js';
 
 const code = (value: ErrorCode) => ({ error: value });
@@ -139,6 +140,9 @@ export type ManualEntryInput = z.infer<typeof manualEntrySchema>;
  * paramètre `before` pour charger la page suivante.
  */
 export type HistoryPageDto = HistoryPage<TimeEntryDto>;
+
+/** Mes projets (ADR-0016) : Durées totales de l'Utilisateur courant par Projet puis par Activité. */
+export type MyProjectsDto = MyProjectsSummary;
 
 /** Imputation éditée, et celle que la Scission a créée sur l'autre Journée, s'il y en a une. */
 export interface EditedTimeEntryDto {

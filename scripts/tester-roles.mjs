@@ -1134,11 +1134,83 @@ await check('en base, un Utilisateur ne retire personne ni n’arrête le Chrono
   await call(alice, 'POST', '/time-entries/timer/stop');
 });
 
+console.log('\nMes projets (API, ADR-0016, #21)');
+// P9 : alice, bruno et diane affectés ; P10 : alice affectée, diane non.
+const mine = {};
+mine.p9 = (await call(diane, 'POST', '/projects', { name: `P9 ${RUN}` })).body.id;
+mine.p10 = (await call(diane, 'POST', '/projects', { name: `P10 ${RUN}` })).body.id;
+mine.dev9 = (await call(diane, 'POST', `/projects/${mine.p9}/activities`, { name: 'Développement' })).body.id;
+mine.doc9 = (await call(diane, 'POST', `/projects/${mine.p9}/activities`, { name: 'Documentation' })).body.id;
+mine.unused9 = (await call(diane, 'POST', `/projects/${mine.p9}/activities`, { name: 'Jamais imputée' })).body.id;
+mine.support10 = (await call(diane, 'POST', `/projects/${mine.p10}/activities`, { name: 'Support' })).body.id;
+for (const u of [alice, bruno, diane]) await call(diane, 'PUT', `/projects/${mine.p9}/members/${u.sub}`);
+await call(diane, 'PUT', `/projects/${mine.p10}/members/${alice.sub}`);
+const typed = (user, projectId, activityId, startedAt, endedAt) => manual(user, { projectId, activityId, startedAt, endedAt });
+// alice : P10 commence le plus tôt ; dans P9, Documentation avant Développement.
+await typed(alice, mine.p9, mine.dev9, '2025-01-07T09:00:00Z', '2025-01-07T10:00:00Z');
+await typed(alice, mine.p9, mine.doc9, '2025-01-06T09:00:00Z', '2025-01-06T09:30:00Z');
+await typed(alice, mine.p9, mine.dev9, '2025-01-08T09:00:00Z', '2025-01-08T09:00:42Z');
+await typed(alice, mine.p10, mine.support10, '2025-01-05T09:00:00Z', '2025-01-05T09:45:00Z');
+await typed(bruno, mine.p9, mine.dev9, '2025-01-05T08:00:00Z', '2025-01-05T12:00:00Z');
+const myProjects = async (user) => {
+  const r = await call(user, 'GET', '/reports/projects');
+  assert.equal(r.status, 200);
+  return r.body;
+};
+const ours = (summary) => summary.projects.filter((p) => p.projectId === mine.p9 || p.projectId === mine.p10);
+
+await check('alice voit ses Projets affectés, ordonnés par leur première Imputation, avec leurs Activités et Durées totales', async () => {
+  await start(alice, { projectId: mine.p9, activityId: mine.unused9 }); // Chronomètre : non compté
+  try {
+    const summary = await myProjects(alice);
+    assert.deepEqual(ours(summary), [
+      {
+        projectId: mine.p10,
+        projectName: `P10 ${RUN}`,
+        totalSeconds: 2700,
+        activities: [{ activityId: mine.support10, activityName: 'Support', totalSeconds: 2700 }],
+      },
+      {
+        projectId: mine.p9,
+        projectName: `P9 ${RUN}`,
+        totalSeconds: 5442,
+        activities: [
+          { activityId: mine.doc9, activityName: 'Documentation', totalSeconds: 1800 },
+          { activityId: mine.dev9, activityName: 'Développement', totalSeconds: 3642 },
+        ],
+      },
+    ]);
+    assert.equal(summary.totalSeconds, summary.projects.reduce((sum, p) => sum + p.totalSeconds, 0));
+  } finally {
+    await call(alice, 'POST', '/time-entries/timer/stop');
+  }
+});
+await check('les Imputations de bruno, sur le même Projet, ne comptent pas pour alice ; bruno ne voit que les siennes', async () => {
+  assert.deepEqual(ours(await myProjects(bruno)).map((p) => [p.projectId, p.totalSeconds]), [[mine.p9, 14400]]);
+});
+await check('diane (Administrateur) : ni les Projets où elle n’est pas affectée, ni les Imputations des autres', async () => {
+  // Sa saisie sur P10, où elle n’est pas affectée, n’apparaît pas ; sur P9, seule la sienne compte.
+  await typed(diane, mine.p10, mine.support10, '2025-01-04T09:00:00Z', '2025-01-04T10:00:00Z');
+  assert.deepEqual(ours(await myProjects(diane)), []);
+  await typed(diane, mine.p9, mine.dev9, '2025-01-04T09:00:00Z', '2025-01-04T09:15:00Z');
+  assert.deepEqual(ours(await myProjects(diane)).map((p) => [p.projectId, p.totalSeconds]), [[mine.p9, 900]]);
+});
+await check('alice retirée de P10 : P10 disparaît de Mes projets, avec ses Activités et sa Durée totale', async () => {
+  const before = await myProjects(alice);
+  assert.equal((await call(diane, 'DELETE', `/projects/${mine.p10}/members/${alice.sub}`)).status, 204);
+  const after = await myProjects(alice);
+  assert.deepEqual(ours(after).map((p) => p.projectId), [mine.p9]);
+  assert.equal(after.totalSeconds, before.totalSeconds - 2700);
+});
+await check('chloé (non affectée) ne voit aucun de ces Projets', async () => {
+  assert.deepEqual(ours(await myProjects(chloe)), []);
+});
+
 console.log('\nNettoyage');
 await check('suppression des Projets et Utilisateurs de test', async () => {
   await inDb(diane, async (q) => {
     await q(`DELETE FROM app_user WHERE id = $1`, [`test-cascade-${RUN}`]);
-    await q(`DELETE FROM project WHERE id = ANY($1) OR name = $2`, [[data.p1, data.p2, p3, p4, fixture.p5, fixture.p6, removal.p7, removal.p8].filter(Boolean), 'L'.repeat(1000)]);
+    await q(`DELETE FROM project WHERE id = ANY($1) OR name = $2`, [[data.p1, data.p2, p3, p4, fixture.p5, fixture.p6, removal.p7, removal.p8, mine.p9, mine.p10].filter(Boolean), 'L'.repeat(1000)]);
   }, { commit: true });
 });
 

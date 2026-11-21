@@ -12,6 +12,8 @@ import { HealthController } from './health/health.controller.js';
 import { ProjectsController } from './projects/projects.controller.js';
 import { ProjectAccessGuard } from './projects/project-access.guard.js';
 import { ProjectsService } from './projects/projects.service.js';
+import { ReportsController } from './reports/reports.controller.js';
+import { ReportsService } from './reports/reports.service.js';
 import { TimeEntriesController } from './time-entries/time-entries.controller.js';
 import { TimeEntriesService } from './time-entries/time-entries.service.js';
 import { UsersController } from './users/users.controller.js';
@@ -24,6 +26,7 @@ import { UsersService } from './users/users.service.js';
     ActivitiesController,
     ActivitySearchController,
     TimeEntriesController,
+    ReportsController,
     UsersController,
   ],
   providers: [
@@ -35,6 +38,7 @@ import { UsersService } from './users/users.service.js';
     ProjectsService,
     ActivitiesService,
     TimeEntriesService,
+    ReportsService,
     ProjectAccessGuard,
     { provide: APP_GUARD, useClass: AuthGuard },
   ],
