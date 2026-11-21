@@ -50,3 +50,16 @@ export function parseEnteredRange(range: EnteredRange): { startedAt: Date; ended
     endedAt: zurichInstant(endDay, end.hours, end.minutes),
   };
 }
+
+/**
+ * Plage du Rapport saisie (« Du », « Au ») : ses Journées, `null` sans « Du »
+ * (rien n'est lancé, comme dans la source), ou une date illisible (ADR-0022).
+ * « Au » vide vaut « Du » : un Rapport d'une seule Journée, comme dans la source.
+ */
+export function parseEnteredReportRange(from: string, to: string): { from: Day; to: Day } | { error: 'date' } | null {
+  if (!from.trim()) return null;
+  const fromDay = parseDateInput(from);
+  const toDay = to.trim() ? parseDateInput(to) : fromDay;
+  if (!fromDay || !toDay) return { error: 'date' };
+  return { from: fromDay, to: toDay };
+}

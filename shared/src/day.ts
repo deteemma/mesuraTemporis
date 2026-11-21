@@ -63,6 +63,13 @@ export function shiftDay(day: Day, count: number): Day {
   return new Date(Date.UTC(year, month - 1, date + count)).toISOString().slice(0, 10);
 }
 
+const ISO_DAY = /^\d{4}-\d{2}-\d{2}$/;
+
+/** Vrai pour une Journée AAAA-MM-JJ qui existe au calendrier. */
+export function isDay(value: unknown): value is Day {
+  return typeof value === 'string' && ISO_DAY.test(value) && shiftDay(value, 0) === value;
+}
+
 /** Bornes d'une Journée : début à minuit, fin incluse à 23:59:59.999 (23 ou 25 heures aux changements d'heure). */
 export function dayBounds(day: Day): { start: Date; end: Date } {
   const start = zurichInstant(day, 0, 0);

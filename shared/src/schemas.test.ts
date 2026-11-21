@@ -6,6 +6,7 @@ import {
   inlineEditSchema,
   manualEntrySchema,
   renameActivitySchema,
+  reportRangeSchema,
 } from './schemas.js';
 
 const refusal = (input: unknown) => createProjectSchema.safeParse(input).error?.issues[0]?.message;
@@ -88,4 +89,19 @@ test('Saisie manuelle : une fin égale au début, ou une saisie qui franchit min
   assert.equal(manualEntrySchema.safeParse({ ...manualEntry, endedAt: manualEntry.startedAt }).success, true);
   const overnight = { ...manualEntry, startedAt: '2026-01-05T22:00:00.000Z', endedAt: '2026-01-06T01:00:00.000Z' };
   assert.deepEqual(manualEntrySchema.parse(overnight), overnight);
+});
+
+const rangeRefusal = (input: unknown) => reportRangeSchema.safeParse(input).error?.issues[0]?.message;
+
+test('une plage du Rapport se donne par deux Journées AAAA-MM-JJ, bornes incluses, même inversées', () => {
+  assert.deepEqual(reportRangeSchema.parse({ from: '2026-01-01', to: '2026-01-31' }), { from: '2026-01-01', to: '2026-01-31' });
+  assert.deepEqual(reportRangeSchema.parse({ from: '2026-01-31', to: '2026-01-01' }), { from: '2026-01-31', to: '2026-01-01' });
+});
+
+test('une plage sans « Du », sans « Au » ou illisible est refusée avec PLAGE_DATES_REQUISE', () => {
+  assert.equal(rangeRefusal({ to: '2026-01-31' }), 'PLAGE_DATES_REQUISE');
+  assert.equal(rangeRefusal({ from: '', to: '2026-01-31' }), 'PLAGE_DATES_REQUISE');
+  assert.equal(rangeRefusal({ from: '2026-01-01' }), 'PLAGE_DATES_REQUISE');
+  assert.equal(rangeRefusal({ from: '05.01.2026', to: '2026-01-31' }), 'PLAGE_DATES_REQUISE');
+  assert.equal(rangeRefusal({ from: '2026-02-31', to: '2026-03-01' }), 'PLAGE_DATES_REQUISE');
 });

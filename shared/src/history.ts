@@ -3,7 +3,7 @@
 // l'UTC. Les Journées s'accumulent, de la plus récente à la plus ancienne, tant
 // que le plafond de groupes Projet/Activité n'est pas dépassé ; une Journée
 // n'est jamais coupée entre deux pages, même quand elle dépasse seule le plafond.
-import { type Day, dayOf, shiftDay } from './day.js';
+import { type Day, dayOf, isDay, shiftDay } from './day.js';
 import { type GroupableEntry, type TimeEntryGroup, groupByActivity } from './time-entry-groups.js';
 
 /** Plafond de groupes Projet/Activité d'une page, à l'identique de la source. */
@@ -20,8 +20,6 @@ export interface HistoryPage<E extends GroupableEntry> {
   nextCursor: Day | null;
 }
 
-const ISO_DAY = /^\d{4}-\d{2}-\d{2}$/;
-
 /**
  * Journée par laquelle commence une page (incluse). La Journée en cours est
  * toujours exclue : un curseur absent, illisible, absent du calendrier, ou qui
@@ -29,7 +27,7 @@ const ISO_DAY = /^\d{4}-\d{2}-\d{2}$/;
  */
 export function historyStartDay(before: string | undefined, today: Day): Day {
   const yesterday = shiftDay(today, -1);
-  if (before === undefined || !ISO_DAY.test(before) || shiftDay(before, 0) !== before) return yesterday;
+  if (!isDay(before)) return yesterday;
   return before < today ? before : yesterday;
 }
 

@@ -2,9 +2,12 @@
 // Le message d'erreur d'un schéma est un Code d'erreur du catalogue (ADR-0021) :
 // l'API le renvoie tel quel dans le corps `{ code, message }` du refus.
 import { z } from 'zod';
+import type { DailySummary } from './daily-summary.js';
+import { isDay } from './day.js';
 import type { ErrorCode } from './error-codes.js';
 import type { HistoryPage } from './history.js';
 import type { MyProjectsSummary } from './my-projects.js';
+import type { Report } from './report.js';
 import type { ProjectRole } from './roles.js';
 
 const code = (value: ErrorCode) => ({ error: value });
@@ -143,6 +146,23 @@ export type HistoryPageDto = HistoryPage<TimeEntryDto>;
 
 /** Mes projets (ADR-0016) : Durées totales de l'Utilisateur courant par Projet puis par Activité. */
 export type MyProjectsDto = MyProjectsSummary;
+
+const reportDaySchema = z.string(code('PLAGE_DATES_REQUISE')).refine(isDay, code('PLAGE_DATES_REQUISE'));
+
+/**
+ * Plage du Rapport : « Du » et « Au », Journées AAAA-MM-JJ, bornes incluses,
+ * sans limite de durée. Les deux sont requises, comme dans la source :
+ * l'interface envoie « Au » = « Du » quand « Au » est vide. Une plage inversée
+ * est acceptée et donne un Rapport vide.
+ */
+export const reportRangeSchema = z.object({ from: reportDaySchema, to: reportDaySchema });
+export type ReportRangeInput = z.infer<typeof reportRangeSchema>;
+
+/** Rapport sur une plage (Administrateur : tous les Utilisateurs ; sinon soi). */
+export type ReportDto = Report;
+
+/** Synthèse journalière de l'Utilisateur courant (API seulement, #11 note 2). */
+export type DailySummaryDto = DailySummary;
 
 /** Imputation éditée, et celle que la Scission a créée sur l'autre Journée, s'il y en a une. */
 export interface EditedTimeEntryDto {

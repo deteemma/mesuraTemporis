@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { formatDateInput, parseDateInput, parseEnteredRange } from './date-input.js';
+import { formatDateInput, parseDateInput, parseEnteredRange, parseEnteredReportRange } from './date-input.js';
 
 test('une date saisie jj.mm.aaaa donne sa Journée, jour et mois sur un ou deux chiffres', () => {
   assert.equal(parseDateInput('19.11.2026'), '2026-11-19');
@@ -43,4 +43,15 @@ test('une date illisible est signalée avant une heure illisible', () => {
   assert.deepEqual(parseEnteredRange({ startDate: '28.02.2026', startTime: '25', endDate: '01.03.2026', endTime: '10' }), {
     error: 'time',
   });
+});
+
+test('plage du Rapport saisie : « Du » et « Au » jj.mm.aaaa donnent leurs Journées ; « Au » vide vaut une seule Journée', () => {
+  assert.deepEqual(parseEnteredReportRange('01.01.2026', '31.01.2026'), { from: '2026-01-01', to: '2026-01-31' });
+  assert.deepEqual(parseEnteredReportRange('05.01.2026', '  '), { from: '2026-01-05', to: '2026-01-05' });
+});
+
+test('plage du Rapport saisie : rien sans « Du » ; une date illisible est signalée', () => {
+  assert.equal(parseEnteredReportRange(' ', '31.01.2026'), null);
+  assert.deepEqual(parseEnteredReportRange('31.02.2026', ''), { error: 'date' });
+  assert.deepEqual(parseEnteredReportRange('01.01.2026', '2026-01-31'), { error: 'date' });
 });

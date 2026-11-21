@@ -1206,11 +1206,99 @@ await check('chloé (non affectée) ne voit aucun de ces Projets', async () => {
   assert.deepEqual(ours(await myProjects(chloe)), []);
 });
 
+console.log('\nRapport et synthèse journalière (API et base, #22)');
+// P11 : alice et bruno affectés (Projet partagé) ; P12 : alice affectée, puis retirée.
+const rep = {};
+rep.p11 = (await call(diane, 'POST', '/projects', { name: `P11 ${RUN}` })).body.id;
+rep.p12 = (await call(diane, 'POST', '/projects', { name: `P12 ${RUN}` })).body.id;
+rep.dev11 = (await call(diane, 'POST', `/projects/${rep.p11}/activities`, { name: 'Développement' })).body.id;
+rep.doc11 = (await call(diane, 'POST', `/projects/${rep.p11}/activities`, { name: 'Documentation' })).body.id;
+rep.support12 = (await call(diane, 'POST', `/projects/${rep.p12}/activities`, { name: 'Support' })).body.id;
+for (const u of [alice, bruno]) await call(diane, 'PUT', `/projects/${rep.p11}/members/${u.sub}`);
+await call(diane, 'PUT', `/projects/${rep.p12}/members/${alice.sub}`);
+// Juin 2024 (heure d'été, UTC+2) : 22:30 UTC le 03.06 est 00:30 le 04.06 à Zurich.
+await typed(alice, rep.p11, rep.doc11, '2024-06-03T12:00:00Z', '2024-06-03T12:30:00Z');
+await typed(alice, rep.p11, rep.dev11, '2024-06-03T07:00:00Z', '2024-06-03T08:00:00Z');
+await typed(alice, rep.p11, rep.dev11, '2024-06-03T14:00:00Z', '2024-06-03T14:00:42Z');
+await typed(alice, rep.p12, rep.support12, '2024-06-03T22:30:00Z', '2024-06-03T23:15:00Z');
+await typed(bruno, rep.p11, rep.dev11, '2024-06-03T06:00:00Z', '2024-06-03T10:00:00Z');
+await call(diane, 'DELETE', `/projects/${rep.p12}/members/${alice.sub}`);
+const reportOf = async (user, from, to) => {
+  const r = await call(user, 'GET', `/reports/range?${new URLSearchParams({ from, to })}`);
+  assert.equal(r.status, 200);
+  return r.body;
+};
+// Lignes des seuls Projets de ce contrôle : [Journée, Login, Activité, Durée].
+const reportLines = (report) =>
+  report.days.flatMap((d) =>
+    d.lines
+      .filter((l) => l.projectId === rep.p11 || l.projectId === rep.p12)
+      .map((l) => [d.day, l.userLogin, l.activityName, l.totalSeconds]),
+  );
+
+await check('alice : ses seules Imputations, Projet partagé et Projet quitté compris, par Journée suisse et dans l’ordre E23', async () => {
+  const report = await reportOf(alice, '2024-06-03', '2024-06-04');
+  assert.deepEqual(reportLines(report), [
+    ['2024-06-03', 'alice', 'Développement', 3642],
+    ['2024-06-03', 'alice', 'Documentation', 1800],
+    ['2024-06-04', 'alice', 'Support', 2700],
+  ]);
+  assert.ok(report.days.every((d) => d.lines.every((l) => l.userId === alice.sub)));
+  for (const d of report.days) assert.equal(d.totalSeconds, d.lines.reduce((sum, l) => sum + l.totalSeconds, 0));
+  assert.equal(report.totalSeconds, report.days.reduce((sum, d) => sum + d.totalSeconds, 0));
+});
+await check('en base, alice ne lit pas les Imputations de bruno sur le Projet partagé', async () => {
+  const r = await query(alice, `SELECT DISTINCT user_id FROM time_entry WHERE project_id = $1`, [rep.p11]);
+  assert.deepEqual(r.rows.map((row) => row.user_id), [alice.sub]);
+});
+await check('bruno ne voit que les siennes ; chloé (non affectée) ne voit rien', async () => {
+  assert.deepEqual(reportLines(await reportOf(bruno, '2024-06-01', '2024-06-30')), [['2024-06-03', 'bruno', 'Développement', 14400]]);
+  assert.deepEqual(reportLines(await reportOf(chloe, '2024-06-01', '2024-06-30')), []);
+});
+await check('diane (Administrateur) voit les Imputations de tout le monde', async () => {
+  assert.deepEqual(reportLines(await reportOf(diane, '2024-06-03', '2024-06-03')), [
+    ['2024-06-03', 'bruno', 'Développement', 14400],
+    ['2024-06-03', 'alice', 'Développement', 3642],
+    ['2024-06-03', 'alice', 'Documentation', 1800],
+  ]);
+});
+await check('une plage sans « Du », sans « Au » ou illisible est refusée avec PLAGE_DATES_REQUISE ; une plage inversée est vide', async () => {
+  for (const path of ['/reports/range?to=2024-06-30', '/reports/range?from=2024-06-01', '/reports/range?from=03.06.2024&to=2024-06-30']) {
+    const r = await call(alice, 'GET', path);
+    assert.equal(r.status, 400, path);
+    assert.equal(r.body.code, 'PLAGE_DATES_REQUISE', path);
+  }
+  const inverted = await reportOf(diane, '2024-06-30', '2024-06-01');
+  assert.deepEqual(inverted.days, []);
+  assert.equal(inverted.totalSeconds, 0);
+});
+await check('le Chronomètre en cours est exclu du Rapport et de la synthèse journalière', async () => {
+  await start(alice, { projectId: rep.p11, activityId: rep.doc11 });
+  try {
+    const today = (await call(alice, 'GET', '/reports/daily')).body;
+    assert.equal(today.day, zurichDay(Date.now()));
+    assert.ok(!today.lines.some((l) => l.projectId === rep.p11));
+    assert.deepEqual(reportLines(await reportOf(alice, today.day, today.day)), []);
+  } finally {
+    await call(alice, 'POST', '/time-entries/timer/stop');
+  }
+});
+await check('synthèse journalière : ses Imputations de la Journée suisse, par Projet et Activité, Administrateur compris', async () => {
+  const summary = (await call(alice, 'GET', '/reports/daily?day=2024-06-03')).body;
+  assert.deepEqual(summary.lines.filter((l) => l.projectId === rep.p11).map((l) => [l.activityName, l.totalSeconds]), [
+    ['Développement', 3642],
+    ['Documentation', 1800],
+  ]);
+  assert.ok(!summary.lines.some((l) => l.projectId === rep.p12)); // 00:30 le lendemain
+  const forDiane = (await call(diane, 'GET', '/reports/daily?day=2024-06-03')).body;
+  assert.ok(!forDiane.lines.some((l) => l.projectId === rep.p11)); // pas celles des autres
+});
+
 console.log('\nNettoyage');
 await check('suppression des Projets et Utilisateurs de test', async () => {
   await inDb(diane, async (q) => {
     await q(`DELETE FROM app_user WHERE id = $1`, [`test-cascade-${RUN}`]);
-    await q(`DELETE FROM project WHERE id = ANY($1) OR name = $2`, [[data.p1, data.p2, p3, p4, fixture.p5, fixture.p6, removal.p7, removal.p8, mine.p9, mine.p10].filter(Boolean), 'L'.repeat(1000)]);
+    await q(`DELETE FROM project WHERE id = ANY($1) OR name = $2`, [[data.p1, data.p2, p3, p4, fixture.p5, fixture.p6, removal.p7, removal.p8, mine.p9, mine.p10, rep.p11, rep.p12].filter(Boolean), 'L'.repeat(1000)]);
   }, { commit: true });
 });
 

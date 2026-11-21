@@ -1206,3 +1206,54 @@ select {
   font-weight: 600;
   font-size: var(--text-lg);
 }
+
+/* Rapport, repris de la source : filtre Du / Au, total sur la période, une carte par Journée */
+
+.rapport__filtre {
+  padding: var(--space-4) var(--space-5);
+}
+
+.rapport__filtre > .inline-form {
+  align-items: flex-start;
+  padding: 0;
+}
+
+.rapport__filtre .field-group {
+  width: 170px;
+}
+
+.rapport__actions {
+  display: flex;
+  gap: var(--space-3);
+  /* aligne le bouton sur la ligne des champs, pas sur celle des libellés Du/Au */
+  margin-top: calc(var(--text-sm) + var(--space-1) + 4px);
+}
+
+.field-hint {
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+}
+
+.rapport__filtre .banner-error {
+  margin-top: var(--space-3);
+}
+
+.rapport__jour {
+  padding: var(--space-4) var(--space-5);
+}
+
+/* La carte porte déjà sa marge intérieure. */
+.rapport__jour > .resource-list {
+  padding: 0;
+}
+
+.rapport__jour-entete {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: var(--space-2);
+}
+
+.rapport__jour-titre {
+  font-size: var(--text-lg);
+}
