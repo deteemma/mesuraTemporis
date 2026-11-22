@@ -116,9 +116,11 @@ Le bouton « Google » apparaît sur la page de connexion. Tant que l'identifian
 reste vide, il est désactivé.
 
 À la première connexion Google, un Utilisateur est créé (rôle `utilisateur`,
-aucun Projet, Login = Email) ou rattaché à l'Utilisateur de même Email, sans
-page de profil. Un compte Google dont l'email n'est pas vérifié est refusé.
-Ces réglages (ADR-0019) sont livrés dans le realm : rien à configurer dans Keycloak.
+aucun Projet, Login = Email), sans page de profil. La connexion Google est
+refusée si l'email n'est pas vérifié, ou si l'Email est déjà celui (ou le Login)
+d'un Utilisateur : un compte créé par un Administrateur se connecte uniquement
+par Login et mot de passe. Ces réglages (ADR-0019, ADR-0024) sont livrés dans le
+realm : rien à configurer dans Keycloak.
 
 ## Mettre à jour
 

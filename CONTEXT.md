@@ -23,7 +23,7 @@ les identifiants de code en anglais.
 | Administrateur | `administrateur` (rôle Keycloak) | Utilisateur qui gère comptes, Projets, Activités et équipes, et voit toutes les Imputations. Il garde tous les droits d'un Utilisateur ; ce n'est pas un compte séparé. | Admin, manager, chef de projet |
 | Compte initial | `admin` | Compte Administrateur créé avec l'application ; son rôle ne peut pas lui être retiré et il ne peut pas être supprimé. | Super-admin, compte racine |
 | Login | `login` | Identifiant de connexion par mot de passe, choisi par l'Administrateur, distinct de l'Email et non modifiable. Pour un compte né de Google, c'est son Email. | Identifiant email, nom d'utilisateur |
-| Email | `email` | Adresse unique d'un Utilisateur ; pivot du rattachement d'une connexion Google à un Utilisateur existant. | Adresse mail, courriel |
+| Email | `email` | Adresse unique d'un Utilisateur. Une première connexion Google dont l'Email est déjà pris est refusée : aucun rattachement (ADR-0024). | Adresse mail, courriel |
 | Nom | `name` | Nom affiché d'un Utilisateur, en un seul champ, facultatif. | Prénom / nom de famille |
 | Annuaire des comptes | `AccountDirectory` | Source de vérité des comptes de connexion et de leur rôle (Keycloak), interrogée par l'application. Un compte absent de l'Annuaire n'a aucun rôle. | Keycloak (dans l'interface), annuaire LDAP |
 

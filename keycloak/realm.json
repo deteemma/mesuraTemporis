@@ -144,7 +144,7 @@
   "authenticationFlows": [
     {
       "alias": "google first broker login",
-      "description": "Première connexion Google : crée l'Utilisateur ou le rattache à celui de même Email, sans page de profil (ADR-0019)",
+      "description": "Première connexion Google : crée l'Utilisateur, sans page de profil ; refusée si l'Email ou le Login est déjà pris (ADR-0019, ADR-0024)",
       "providerId": "basic-flow",
       "topLevel": true,
       "builtIn": false,
@@ -157,30 +157,7 @@
           "userSetupAllowed": false
         },
         {
-          "flowAlias": "google first broker login - create or link",
-          "requirement": "REQUIRED",
-          "priority": 20,
-          "autheticatorFlow": true,
-          "userSetupAllowed": false
-        }
-      ]
-    },
-    {
-      "alias": "google first broker login - create or link",
-      "description": "Crée l'Utilisateur s'il est unique, sinon le rattache à l'Utilisateur existant de même Email",
-      "providerId": "basic-flow",
-      "topLevel": false,
-      "builtIn": false,
-      "authenticationExecutions": [
-        {
           "authenticator": "idp-create-user-if-unique",
-          "requirement": "ALTERNATIVE",
-          "priority": 10,
-          "autheticatorFlow": false,
-          "userSetupAllowed": false
-        },
-        {
-          "authenticator": "idp-auto-link",
           "requirement": "ALTERNATIVE",
           "priority": 20,
           "autheticatorFlow": false,
