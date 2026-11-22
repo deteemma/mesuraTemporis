@@ -129,10 +129,34 @@ export class UsersService {
    * personne. Refusé pour le Compte initial et pour soi (ADR-0018). Le Login
    * est lu dans l'Annuaire : le Compte initial n'a pas de ligne Utilisateur
    * avant sa première connexion.
+   *
+   * Son Chronomètre sur un Projet où il n'est pas affecté s'arrête à l'instant
+   * du retrait, dans la même transaction : il n'y a plus accès (validé par la
+   * responsable fonctionnelle, #25). Sur un Projet où il est affecté, il
+   * continue. Si l'Annuaire échoue, l'arrêt est annulé.
    */
   async revokeAdministrator(user: AuthenticatedUser, userId: string): Promise<void> {
     assertAccountActionAllowed(user, await this.accounts.account(userId));
-    await this.accounts.revokeAdministrator(userId);
+    await this.database.asUser(user, async (tx) => {
+      const revokedAt = new Date();
+      await tx
+        .updateTable('time_entry as e')
+        .set({ ended_at: revokedAt })
+        .where('e.user_id', '=', userId)
+        .where('e.ended_at', 'is', null)
+        .where(({ not, exists, selectFrom }) =>
+          not(
+            exists(
+              selectFrom('project_member as m')
+                .select('m.user_id')
+                .whereRef('m.project_id', '=', 'e.project_id')
+                .whereRef('m.user_id', '=', 'e.user_id'),
+            ),
+          ),
+        )
+        .execute();
+      await this.accounts.revokeAdministrator(userId);
+    });
   }
 
   /**

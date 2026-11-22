@@ -1611,6 +1611,35 @@ await check('diane lui retire le rôle : badge, Keycloak, sessions fermées auss
   assert.equal(r.body.code, 'ACCES_REFUSE');
   assert.equal((await call(diane, 'DELETE', `/users/${promoted.id}/administrator`)).status, 204, 'retrait rejouable');
 });
+// P14 : Projet où « retro » n'est pas affecté ; P15 : Projet où il l'est.
+const demotion = {};
+demotion.p14 = (await call(diane, 'POST', '/projects', { name: `P14 ${RUN}` })).body.id;
+demotion.p15 = (await call(diane, 'POST', '/projects', { name: `P15 ${RUN}` })).body.id;
+demotion.a14 = (await call(diane, 'POST', `/projects/${demotion.p14}/activities`, { name: 'Veille' })).body.id;
+demotion.a15 = (await call(diane, 'POST', `/projects/${demotion.p15}/activities`, { name: 'Veille' })).body.id;
+await check('retrait du rôle : son Chronomètre sur un Projet où il n’est pas affecté s’arrête à l’instant du retrait', async () => {
+  const retro = await accountWithSession('retro', true);
+  demotion.retro = retro;
+  const timer = (await start(retro, { projectId: demotion.p14, activityId: demotion.a14 })).body.timer;
+  assert.ok(timer, 'Chronomètre impossible à démarrer');
+  const before = Date.now();
+  assert.equal((await call(diane, 'DELETE', `/users/${retro.id}/administrator`)).status, 204);
+  const after = Date.now();
+  const { ended_at } = (await query(diane, `SELECT ended_at FROM time_entry WHERE id = $1`, [timer.id])).rows[0];
+  assert.ok(ended_at, 'Chronomètre toujours en cours');
+  assert.ok(ended_at.getTime() >= before - 1000 && ended_at.getTime() <= after + 1000, `fin ${ended_at.toISOString()} hors de l’instant du retrait`);
+});
+await check('retrait du rôle : son Chronomètre sur un Projet où il est affecté continue', async () => {
+  const { retro } = demotion;
+  assert.equal((await call(diane, 'PUT', `/users/${retro.id}/administrator`)).status, 204);
+  assert.equal((await call(diane, 'PUT', `/projects/${demotion.p15}/members/${retro.id}`)).status, 204);
+  Object.assign(retro, await login(`retro-${RUN}`, true));
+  const timer = (await start(retro, { projectId: demotion.p15, activityId: demotion.a15 })).body.timer;
+  assert.ok(timer, 'Chronomètre impossible à démarrer');
+  assert.equal((await call(diane, 'DELETE', `/users/${retro.id}/administrator`)).status, 204);
+  const { ended_at } = (await query(diane, `SELECT ended_at FROM time_entry WHERE id = $1`, [timer.id])).rows[0];
+  assert.equal(ended_at, null, 'Chronomètre arrêté à tort');
+});
 await check('rôle d’un Utilisateur inconnu → 404 UTILISATEUR_INTROUVABLE', async () => {
   for (const method of ['PUT', 'DELETE']) {
     const r = await call(diane, method, `/users/inconnu-${RUN}/administrator`);
@@ -1686,7 +1715,7 @@ console.log('\nNettoyage');
 await check('suppression des Projets et Utilisateurs de test', async () => {
   await inDb(diane, async (q) => {
     await q(`DELETE FROM app_user WHERE id = $1 OR id = ANY($2)`, [`test-cascade-${RUN}`, createdAccounts]);
-    await q(`DELETE FROM project WHERE id = ANY($1) OR name = $2`, [[data.p1, data.p2, p3, p4, fixture.p5, fixture.p6, removal.p7, removal.p8, mine.p9, mine.p10, rep.p11, rep.p12, p13].filter(Boolean), 'L'.repeat(1000)]);
+    await q(`DELETE FROM project WHERE id = ANY($1) OR name = $2`, [[data.p1, data.p2, p3, p4, fixture.p5, fixture.p6, removal.p7, removal.p8, mine.p9, mine.p10, rep.p11, rep.p12, p13, demotion.p14, demotion.p15].filter(Boolean), 'L'.repeat(1000)]);
   }, { commit: true });
   for (const id of createdAccounts) await keycloak('DELETE', `/users/${id}`);
 });
