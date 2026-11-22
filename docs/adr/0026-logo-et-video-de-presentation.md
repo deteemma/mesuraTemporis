@@ -6,7 +6,7 @@
 
 ## Contexte
 
-La source affiche en haut du menu latéral une pastille « MT » suivie de « mesuraTemporis ». La responsable fonctionnelle souhaite un logo, et qu'une vidéo de présentation (`mesuratemporis-loop.mp4`, produite hors de ce dépôt) se lance au survol. Le logo reprend le « o » de la vidéo : un cadran à aiguille rouge. Un prototype a comparé trois pictogrammes et deux présentations de la vidéo (branche `prototype/logo-video`).
+La source affiche en haut du menu latéral une pastille « MT » suivie de « mesuraTemporis ». La responsable fonctionnelle souhaite un logo, et qu'une vidéo de présentation (`mesuratemporis-loop.mp4`, produite hors de ce dépôt) se lance au survol. Le logo reprend le « o » de la vidéo : un cadran à aiguille rouge. Un prototype a comparé trois pictogrammes et deux présentations de la vidéo.
 
 ## Décision
 
