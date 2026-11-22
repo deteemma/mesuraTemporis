@@ -118,6 +118,5 @@ export const itErrors: Record<ErrorCode, string> = {
   LOGIN_INVALIDE: 'Nome utente non valido: almeno 3 caratteri, solo lettere, cifre e . - _ @',
   EMAIL_INVALIDE: 'Email non valida',
   NOM_INVALIDE: 'Nome non valido: al massimo 255 caratteri, senza caratteri speciali',
-  UTILISATEUR_COMPTE_INITIAL_PROTEGE: "L'account iniziale non può perdere il suo ruolo né essere eliminato",
   UTILISATEUR_ACTION_SUR_SOI_INTERDITE: 'Non puoi rimuovere il tuo ruolo né eliminare il tuo account',
 };

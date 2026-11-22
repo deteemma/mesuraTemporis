@@ -17,7 +17,7 @@ hérités par chaque application.
 | `api/` | NestJS + Fastify : jetons OIDC, guards de rôles, RLS, migrations SQL ; sert aussi le web |
 | `web/` | React + Vite, connexion Keycloak |
 | `mobile/` | Expo ; mode hors ligne PowerSync en option |
-| `keycloak/` | realm de l'application (`realm.json`) et comptes de test locaux |
+| `keycloak/` | realm de l'application (`realm.json`), Compte initial (`compte-initial.json`) et comptes de test locaux |
 | `powersync/` | configuration PowerSync (profil `mobile-hors-ligne`) |
 | `scripts/` | test de bout en bout des permissions |
 | `deployer.sh` | déploiement : sauvegarde, migrations, démarrage |
@@ -49,7 +49,9 @@ bash scripts/tester-roles.sh
 Ouvrir https://modele.localhost et se connecter avec `alice` / `Test1234!`
 (autres comptes de test : `bruno`, `chloe`, et `diane`, Administrateur).
 Le Compte initial `admin` (mot de passe `admin`, à changer à la première
-connexion) est livré par le realm, sur le poste comme en production.
+connexion) est créé avec le realm (`keycloak/compte-initial.json`), sur le poste
+comme en production. `scripts/tester-roles.sh` le supprime puis le remet dans
+cet état d'installation.
 
 ## Développement
 

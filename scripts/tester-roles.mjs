@@ -1566,7 +1566,7 @@ await check('suppression rejouable : un compte déjà absent de Keycloak n’emp
   assert.equal((await query(diane, `SELECT id FROM app_user WHERE id = $1`, [r.body.id])).rowCount, 0);
 });
 
-console.log('\nRôle Administrateur, Compte initial et actions sur soi (ADR-0018)');
+console.log('\nRôle Administrateur, Compte initial et actions sur soi (ADR-0018, ADR-0025)');
 /** Crée un compte de test au mot de passe définitif Test1234!, et s'y connecte. */
 async function accountWithSession(prefix, isAdmin) {
   const r = created(await call(diane, 'POST', '/users', { login: `${prefix}-${RUN}`, email: `${prefix}-${RUN}@exemple.test`, isAdmin }));
@@ -1648,47 +1648,72 @@ await check('rôle d’un Utilisateur inconnu → 404 UTILISATEUR_INTROUVABLE', 
   }
 });
 
-const initial = (await keycloak('GET', '/users?username=admin&exact=true')).body?.[0];
-await check('Compte initial : retrait du rôle et suppression → 403 UTILISATEUR_COMPTE_INITIAL_PROTEGE ; il reste Administrateur', async () => {
-  assert.ok(initial, 'Compte initial « admin » absent du realm');
+// Compte initial (ADR-0025) : contrôlé sur le vrai compte « admin », qui n'est
+// plus protégé. Pour s'y connecter, son mot de passe devient Test1234! le temps
+// des contrôles. À la fin, il est remis dans son état d'installation (mot de
+// passe « admin » temporaire, rôle Administrateur), sous un nouvel identifiant
+// puisqu'il a été supprimé : ses données locales éventuelles sont perdues.
+const INITIAL_LOGIN = 'admin';
+const findInitial = async () => (await keycloak('GET', `/users?username=${INITIAL_LOGIN}&exact=true`)).body?.[0];
+/** Compte initial tel qu'à l'installation ; recréé s'il a été supprimé. */
+async function restoreInitialAccount() {
+  if (!(await findInitial())) {
+    assert.equal((await keycloak('POST', '/users', { username: INITIAL_LOGIN, enabled: true })).status, 201);
+  }
+  const account = await findInitial();
+  await keycloak('PUT', `/users/${account.id}/reset-password`, { type: 'password', value: 'admin', temporary: true });
+  if (!(await isAdminInKeycloak(account.id))) {
+    const role = (await keycloak('GET', '/roles/administrateur')).body;
+    await keycloak('POST', `/users/${account.id}/role-mappings/realm`, [{ id: role.id, name: role.name }]);
+  }
+  return account;
+}
+/** Se connecte au Compte initial Administrateur ; sa ligne Utilisateur est créée au passage. */
+async function initialWithSession() {
+  const { id } = await restoreInitialAccount();
+  await keycloak('PUT', `/users/${id}/reset-password`, { type: 'password', value: 'Test1234!', temporary: false });
+  await keycloak('PUT', `/users/${id}`, { ...(await keycloak('GET', `/users/${id}`)).body, requiredActions: [] });
+  const initial = { ...(await login(INITIAL_LOGIN, true)), id };
+  assert.equal((await call(initial, 'GET', '/projects')).status, 200);
+  return initial;
+}
+
+await check('Compte initial : il ne peut ni se retirer son rôle ni se supprimer → 403 UTILISATEUR_ACTION_SUR_SOI_INTERDITE', async () => {
+  const initial = await initialWithSession();
   for (const path of [`/users/${initial.id}/administrator`, `/users/${initial.id}`]) {
-    const r = await call(diane, 'DELETE', path);
+    const r = await call(initial, 'DELETE', path);
     assert.equal(r.status, 403, path);
-    assert.equal(r.body.code, 'UTILISATEUR_COMPTE_INITIAL_PROTEGE', path);
+    assert.equal(r.body.code, 'UTILISATEUR_ACTION_SUR_SOI_INTERDITE', path);
   }
-  assert.equal((await keycloak('GET', `/users/${initial.id}`)).status, 200);
   assert.equal(await isAdminInKeycloak(initial.id), true);
+  assert.equal((await query(diane, `SELECT id FROM app_user WHERE id = $1`, [initial.id])).rowCount, 1);
 });
-// Le Compte initial n'a de ligne Utilisateur qu'après sa première connexion :
-// les deux contrôles suivants la retirent ou la posent, puis la rétablissent.
-const initialRow = initial && (await query(diane, `SELECT id, login, email, display_name FROM app_user WHERE id = $1`, [initial.id])).rows[0];
-const restoreInitialRow = async () => {
-  await inDb(diane, async (q) => {
-    await q(`DELETE FROM app_user WHERE id = $1`, [initial.id]);
-    if (initialRow) {
-      await q(`INSERT INTO app_user (id, login, email, display_name) VALUES ($1, $2, $3, $4)`, [initialRow.id, initialRow.login, initialRow.email, initialRow.display_name]);
-    }
-  }, { commit: true });
-};
-await check('Compte initial sans ligne Utilisateur : sa suppression est refusée comme Compte initial, pas « introuvable »', async () => {
-  await inDb(diane, (q) => q(`DELETE FROM app_user WHERE id = $1`, [initial.id]), { commit: true });
-  try {
-    assert.equal((await call(diane, 'DELETE', `/users/${initial.id}`)).body.code, 'UTILISATEUR_COMPTE_INITIAL_PROTEGE');
-  } finally {
-    await restoreInitialRow();
-  }
+await check('diane retire le rôle au Compte initial : badge, Keycloak, sessions fermées aussitôt', async () => {
+  const initial = await initialWithSession();
+  const session = await openSession(INITIAL_LOGIN);
+  assert.equal((await call(diane, 'DELETE', `/users/${initial.id}/administrator`)).status, 204);
+  assert.equal(await stillOpen(session), false, 'la session aurait dû être fermée');
+  assert.equal((await usersList()).users.find((u) => u.id === initial.id).isAdmin, false);
+  assert.equal(await isAdminInKeycloak(initial.id), false);
 });
 await check('Compte initial : modifier son Email reste permis', async () => {
-  const account = (await keycloak('GET', `/users/${initial.id}`)).body;
-  if (!initialRow) await inDb(diane, (q) => q(`INSERT INTO app_user (id, login) VALUES ($1, 'admin')`, [initial.id]), { commit: true });
-  try {
-    assert.equal((await call(diane, 'PUT', `/users/${initial.id}/email`, { email: `initial-${RUN}@exemple.test` })).status, 204);
-    assert.equal((await keycloak('GET', `/users/${initial.id}`)).body.email, `initial-${RUN}@exemple.test`);
-  } finally {
-    await keycloak('PUT', `/users/${initial.id}`, { ...(await keycloak('GET', `/users/${initial.id}`)).body, email: account.email ?? '' });
-    await restoreInitialRow();
-  }
-  assert.equal((await keycloak('GET', `/users/${initial.id}`)).body.email, account.email);
+  const initial = await initialWithSession();
+  assert.equal((await call(diane, 'PUT', `/users/${initial.id}/email`, { email: `initial-${RUN}@exemple.test` })).status, 204);
+  assert.equal((await keycloak('GET', `/users/${initial.id}`)).body.email, `initial-${RUN}@exemple.test`);
+});
+await check('diane supprime le Compte initial : le compte Keycloak et la ligne Utilisateur disparaissent', async () => {
+  const initial = await initialWithSession();
+  assert.equal((await call(diane, 'DELETE', `/users/${initial.id}`)).status, 204);
+  assert.equal((await keycloak('GET', `/users/${initial.id}`)).status, 404);
+  assert.equal((await query(diane, `SELECT id FROM app_user WHERE id = $1`, [initial.id])).rowCount, 0);
+});
+await check('Compte initial remis dans son état d’installation (mot de passe « admin » temporaire, Administrateur)', async () => {
+  const { id } = await restoreInitialAccount();
+  assert.deepEqual((await keycloak('GET', `/users/${id}`)).body.requiredActions, ['UPDATE_PASSWORD']);
+  assert.equal(await isAdminInKeycloak(id), true);
+  // Bon mot de passe, mais temporaire : Keycloak exige d'abord de le changer.
+  const r = await passwordGrant(INITIAL_LOGIN, 'admin');
+  assert.equal((await r.json()).error_description, 'Account is not fully set up');
 });
 
 await check('un Administrateur ne peut ni se retirer son rôle ni se supprimer → 403 UTILISATEUR_ACTION_SUR_SOI_INTERDITE', async () => {

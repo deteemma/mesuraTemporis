@@ -24,7 +24,6 @@ export const ERROR_CODES = [
   'IMPUTATION_CHAMPS_REQUIS',
   'IMPUTATION_FIN_AVANT_DEBUT',
   'PLAGE_DATES_REQUISE',
-  'UTILISATEUR_COMPTE_INITIAL_PROTEGE',
   'UTILISATEUR_ACTION_SUR_SOI_INTERDITE',
 ] as const;
 
@@ -65,7 +64,6 @@ export const ERROR_MESSAGES_FR: Record<ErrorCode, string> = {
   LOGIN_INVALIDE: 'Login invalide : 3 caractères au moins, lettres, chiffres et . - _ @ seulement',
   EMAIL_INVALIDE: 'Email invalide',
   NOM_INVALIDE: 'Nom invalide : 255 caractères au plus, sans caractères spéciaux',
-  UTILISATEUR_COMPTE_INITIAL_PROTEGE: 'Le Compte initial ne peut ni perdre son rôle ni être supprimé',
   UTILISATEUR_ACTION_SUR_SOI_INTERDITE: 'Vous ne pouvez ni retirer votre propre rôle ni supprimer votre propre compte',
 };
 

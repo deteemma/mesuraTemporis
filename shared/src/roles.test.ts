@@ -42,22 +42,15 @@ test('seul le rôle d’équipe « contributor » est attribué', () => {
   assert.deepEqual([...PROJECT_ROLES].sort(), ['contributor', 'owner', 'reader']);
 });
 
-test('retirer le rôle du Compte initial ou le supprimer est refusé, quel que soit l’Administrateur', () => {
-  assert.equal(
-    accountActionRefusal({ actorId: 'diane', target: { id: 'k-admin', login: 'admin' } }),
-    'UTILISATEUR_COMPTE_INITIAL_PROTEGE',
-  );
+test('le Compte initial peut perdre son rôle ou être supprimé par un autre Administrateur (ADR-0025)', () => {
+  assert.equal(accountActionRefusal({ actorId: 'k-diane', targetId: 'k-admin' }), null);
 });
 
 test('un Administrateur ne peut ni se retirer son rôle ni se supprimer ; un autre Administrateur le peut', () => {
-  const target = { id: 'k-diane', login: 'diane' };
-  assert.equal(accountActionRefusal({ actorId: 'k-diane', target }), 'UTILISATEUR_ACTION_SUR_SOI_INTERDITE');
-  assert.equal(accountActionRefusal({ actorId: 'k-emma', target }), null);
+  assert.equal(accountActionRefusal({ actorId: 'k-diane', targetId: 'k-diane' }), 'UTILISATEUR_ACTION_SUR_SOI_INTERDITE');
+  assert.equal(accountActionRefusal({ actorId: 'k-emma', targetId: 'k-diane' }), null);
 });
 
-test('le Compte initial qui se vise est refusé comme Compte initial', () => {
-  assert.equal(
-    accountActionRefusal({ actorId: 'k-admin', target: { id: 'k-admin', login: 'admin' } }),
-    'UTILISATEUR_COMPTE_INITIAL_PROTEGE',
-  );
+test('le Compte initial qui se vise est refusé comme tout Administrateur qui se vise', () => {
+  assert.equal(accountActionRefusal({ actorId: 'k-admin', targetId: 'k-admin' }), 'UTILISATEUR_ACTION_SUR_SOI_INTERDITE');
 });

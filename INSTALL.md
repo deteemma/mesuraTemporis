@@ -49,10 +49,21 @@ APPLICATIONS_DIR=/opt/applications ./deployer.sh monappli 1.0.0
 Le script sauvegarde la base, applique les migrations, démarre les conteneurs et
 attend que l'API réponde.
 
-## 5. Créer le premier administrateur
+## 5. Compte initial
 
-Dans la console Keycloak (`https://auth.exemple.ch`, compte `admin` du socle) :
-realm `monappli` › *Users* › *Add user* (renseigner nom, prénom, e-mail), onglet
+À la création du realm (étape 3), le script crée le **Compte initial** `admin`,
+Administrateur, avec le mot de passe `admin` à changer à la première connexion.
+Il est déclaré à part, dans `keycloak/compte-initial.json`, et n'est appliqué
+qu'à la création du realm.
+
+Une fois un autre Administrateur en place, le Compte initial peut perdre son rôle
+ou être supprimé depuis l'écran Utilisateurs, comme tout autre Administrateur
+(ADR-0025). Les mises à jour ne le recréent pas et ne lui rendent pas son rôle.
+
+Un Administrateur ne peut ni se supprimer ni se retirer son rôle. S'il ne reste
+plus aucun Administrateur (deux Administrateurs qui se suppriment l'un l'autre au
+même instant), recréez-en un dans la console Keycloak (`https://auth.exemple.ch`,
+compte `admin` du socle) : realm `monappli` › *Users* › *Add user*, onglet
 *Credentials* › *Set password*, onglet *Role mapping* › *Assign role* ›
 `administrateur`.
 
@@ -126,7 +137,8 @@ realm : rien à configurer dans Keycloak.
 
 Pour chaque nouvelle version : `APPLICATIONS_DIR=/opt/applications ./deployer.sh monappli <version>`.
 Si `keycloak/realm.json` a changé dans la version, recopiez-le dans le socle et
-réappliquez-le :
+réappliquez-le. Le realm existe déjà : le Compte initial n'est pas réappliqué,
+qu'il ait été supprimé ou non.
 
 ```bash
 cp /opt/applications/monappli/keycloak/realm.json /opt/socle/keycloak/realms/monappli.json

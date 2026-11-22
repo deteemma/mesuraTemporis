@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { type AccountActionTarget, accountActionRefusal, type CreateUserInput, type UserDto, type UserImpactDto, type UserListDto } from '@app/shared';
+import { accountActionRefusal, type CreateUserInput, type UserDto, type UserImpactDto, type UserListDto } from '@app/shared';
 import { sql } from 'kysely';
 import { type Account, AccountDirectory } from '../accounts/account-directory.service.js';
 import type { AuthenticatedUser } from '../auth/authenticated-user.js';
@@ -126,9 +126,8 @@ export class UsersService {
 
   /**
    * Retire le rôle Administrateur et ferme aussitôt les sessions de la
-   * personne. Refusé pour le Compte initial et pour soi (ADR-0018). Le Login
-   * est lu dans l'Annuaire : le Compte initial n'a pas de ligne Utilisateur
-   * avant sa première connexion.
+   * personne. Refusé pour soi (ADR-0018) ; permis pour le Compte initial
+   * (ADR-0025).
    *
    * Son Chronomètre sur un Projet où il n'est pas affecté s'arrête à l'instant
    * du retrait, dans la même transaction : il n'y a plus accès (validé par la
@@ -136,7 +135,7 @@ export class UsersService {
    * continue. Si l'Annuaire échoue, l'arrêt est annulé.
    */
   async revokeAdministrator(user: AuthenticatedUser, userId: string): Promise<void> {
-    assertAccountActionAllowed(user, await this.accounts.account(userId));
+    assertAccountActionAllowed(user, userId);
     await this.database.asUser(user, async (tx) => {
       const revokedAt = new Date();
       await tx
@@ -163,18 +162,14 @@ export class UsersService {
    * Supprime la ligne Utilisateur (Imputations, Chronomètre compris, et
    * affectations partent en cascade), puis ferme les sessions et supprime le
    * compte de l'Annuaire, dans la même transaction : si l'Annuaire échoue, la
-   * base est rétablie. Refusé pour le Compte initial et pour soi (ADR-0018).
-   * Le refus passe avant « introuvable » : le Compte initial est refusé même
-   * sans ligne Utilisateur (avant sa première connexion). Rejouable : un compte
-   * déjà absent de l'Annuaire n'empêche pas de supprimer la ligne, dont le
-   * Login (recopié de l'Annuaire, non modifiable) est alors contrôlé.
+   * base est rétablie. Refusé pour soi (ADR-0018) ; permis pour le Compte
+   * initial (ADR-0025). Rejouable : un compte déjà absent de l'Annuaire
+   * n'empêche pas de supprimer la ligne.
    */
   async remove(user: AuthenticatedUser, userId: string): Promise<void> {
-    const account = await this.accounts.findAccount(userId);
+    assertAccountActionAllowed(user, userId);
     await this.database.asUser(user, async (tx) => {
-      const row = await tx.selectFrom('app_user').select(['id', 'login']).where('id', '=', userId).executeTakeFirst();
-      const target = account ?? row;
-      if (target) assertAccountActionAllowed(user, target);
+      const row = await tx.selectFrom('app_user').select('id').where('id', '=', userId).executeTakeFirst();
       if (!row) throw userNotFound();
       await tx.deleteFrom('app_user').where('id', '=', userId).execute();
       await this.accounts.deleteAccount(userId);
@@ -182,9 +177,9 @@ export class UsersService {
   }
 }
 
-/** Retrait du rôle ou suppression : 403 pour le Compte initial ou soi-même. */
-function assertAccountActionAllowed(user: AuthenticatedUser, target: AccountActionTarget): void {
-  const refusal = accountActionRefusal({ actorId: user.id, target });
+/** Retrait du rôle ou suppression : 403 pour soi-même. */
+function assertAccountActionAllowed(user: AuthenticatedUser, targetId: string): void {
+  const refusal = accountActionRefusal({ actorId: user.id, targetId });
   if (refusal) throw accountActionRefused(refusal);
 }
 

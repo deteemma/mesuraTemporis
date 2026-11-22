@@ -2,7 +2,7 @@
 // du ticket #8 (variante C) : badge de rôle, case « Administrateur » à la
 // création, bouton de rôle par ligne sans confirmation, dialogue de suppression
 // chiffré, refus en notification, ligne sur deux niveaux. Les actions refusées
-// (Compte initial, soi-même) restent visibles : le serveur les refuse, en
+// (sur soi-même) restent visibles : le serveur les refuse, en
 // notification. Il pilote l'Annuaire des comptes par l'API (ADR-0018).
 // Réservé à l'Administrateur : voir App.tsx.
 import type { UserDto, UserImpactDto, UserListDto } from '@app/shared';

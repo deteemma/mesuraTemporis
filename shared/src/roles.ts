@@ -52,25 +52,14 @@ export function can(actor: ProjectActor, action: ProjectAction): boolean {
   return PROJECT_PERMISSIONS[action] === 'assigned' && actor.isAssigned;
 }
 
-/** Login du Compte initial, déclaré dans le realm (ADR-0018). */
-export const INITIAL_ACCOUNT_LOGIN = 'admin';
-
-/** Compte visé par un retrait du rôle Administrateur ou une suppression. */
-export interface AccountActionTarget {
-  id: string;
-  login: string;
-}
-
 /**
- * Refus d'un retrait du rôle Administrateur ou d'une suppression de compte
- * (ADR-0018), ou `null` si l'action est permise. Le Compte initial se contrôle
- * avant l'action sur soi (#11) : le Compte initial qui se vise est refusé comme
- * Compte initial.
+ * Refus d'un retrait du rôle Administrateur ou d'une suppression de compte, ou
+ * `null` si l'action est permise. Seule l'action sur soi est refusée (ADR-0018) :
+ * celui qui agit reste donc Administrateur. Le Compte initial n'est pas protégé
+ * (ADR-0025).
  */
-export type AccountActionRefusal = Extract<ErrorCode, 'UTILISATEUR_COMPTE_INITIAL_PROTEGE' | 'UTILISATEUR_ACTION_SUR_SOI_INTERDITE'>;
+export type AccountActionRefusal = Extract<ErrorCode, 'UTILISATEUR_ACTION_SUR_SOI_INTERDITE'>;
 
-export function accountActionRefusal(action: { actorId: string; target: AccountActionTarget }): AccountActionRefusal | null {
-  if (action.target.login === INITIAL_ACCOUNT_LOGIN) return 'UTILISATEUR_COMPTE_INITIAL_PROTEGE';
-  if (action.target.id === action.actorId) return 'UTILISATEUR_ACTION_SUR_SOI_INTERDITE';
-  return null;
+export function accountActionRefusal(action: { actorId: string; targetId: string }): AccountActionRefusal | null {
+  return action.targetId === action.actorId ? 'UTILISATEUR_ACTION_SUR_SOI_INTERDITE' : null;
 }

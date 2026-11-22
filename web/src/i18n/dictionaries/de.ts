@@ -118,6 +118,5 @@ export const deErrors: Record<ErrorCode, string> = {
   LOGIN_INVALIDE: 'Ungültiger Benutzername: mindestens 3 Zeichen, nur Buchstaben, Ziffern und . - _ @',
   EMAIL_INVALIDE: 'Ungültige E-Mail',
   NOM_INVALIDE: 'Ungültiger Name: höchstens 255 Zeichen, keine Sonderzeichen',
-  UTILISATEUR_COMPTE_INITIAL_PROTEGE: 'Das Erstkonto kann seine Rolle weder verlieren noch gelöscht werden',
   UTILISATEUR_ACTION_SUR_SOI_INTERDITE: 'Sie können weder Ihre eigene Rolle entziehen noch Ihr eigenes Konto löschen',
 };

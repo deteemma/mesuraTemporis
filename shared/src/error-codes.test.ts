@@ -23,7 +23,6 @@ test('le catalogue des Codes d’erreur est celui de la spécification #11, plus
     'PLAGE_DATES_REQUISE',
     'PROJET_INTROUVABLE',
     'UTILISATEUR_ACTION_SUR_SOI_INTERDITE',
-    'UTILISATEUR_COMPTE_INITIAL_PROTEGE',
     'UTILISATEUR_INTROUVABLE',
   ]);
 });
@@ -35,6 +34,7 @@ test('un code du catalogue est reconnu', () => {
 test('un code retiré de la source n’est plus reconnu', () => {
   assert.equal(isErrorCode('PROJET_NON_AFFECTE'), false);
   assert.equal(isErrorCode('JETON_INVALIDE'), false);
+  assert.equal(isErrorCode('UTILISATEUR_COMPTE_INITIAL_PROTEGE'), false);
 });
 
 test('une valeur qui n’est pas un texte n’est pas un code', () => {

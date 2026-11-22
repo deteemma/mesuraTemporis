@@ -21,7 +21,7 @@ les identifiants de code en anglais.
 |---|---|---|---|
 | Utilisateur | `app_user` | Personne disposant d'un compte, qui peut saisir du temps. Naît de l'écran Utilisateurs ou d'une première connexion Google. | Membre, employé |
 | Administrateur | `administrateur` (rôle Keycloak) | Utilisateur qui gère comptes, Projets, Activités et équipes, et voit toutes les Imputations. Il garde tous les droits d'un Utilisateur ; ce n'est pas un compte séparé. | Admin, manager, chef de projet |
-| Compte initial | `admin` | Compte Administrateur créé avec l'application ; son rôle ne peut pas lui être retiré et il ne peut pas être supprimé. | Super-admin, compte racine |
+| Compte initial | `admin` | Compte Administrateur créé avec le realm, à l'installation seulement. Il n'est pas protégé : comme tout Administrateur, il peut perdre son rôle ou être supprimé, et une mise à jour ne le recrée pas (ADR-0025). | Super-admin, compte racine |
 | Login | `login` | Identifiant de connexion par mot de passe, choisi par l'Administrateur, distinct de l'Email et non modifiable. Pour un compte né de Google, c'est son Email. | Identifiant email, nom d'utilisateur |
 | Email | `email` | Adresse unique d'un Utilisateur. Une première connexion Google dont l'Email est déjà pris est refusée : aucun rattachement (ADR-0024). | Adresse mail, courriel |
 | Nom | `name` | Nom affiché d'un Utilisateur, en un seul champ, facultatif. | Prénom / nom de famille |

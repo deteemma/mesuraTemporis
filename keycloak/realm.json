@@ -42,21 +42,6 @@
   },
   "users": [
     {
-      "username": "admin",
-      "enabled": true,
-      "realmRoles": [
-        "administrateur"
-      ],
-      "credentials": [
-        {
-          "type": "password",
-          "value": "admin",
-          "temporary": true,
-          "userLabel": "initial"
-        }
-      ]
-    },
-    {
       "username": "service-account-api-admin",
       "enabled": true,
       "serviceAccountClientId": "api-admin",

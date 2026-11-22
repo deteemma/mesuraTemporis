@@ -1,0 +1,20 @@
+{
+  "realm": "$(env:APP_NAME)",
+  "users": [
+    {
+      "username": "admin",
+      "enabled": true,
+      "realmRoles": [
+        "administrateur"
+      ],
+      "credentials": [
+        {
+          "type": "password",
+          "value": "admin",
+          "temporary": true,
+          "userLabel": "initial"
+        }
+      ]
+    }
+  ]
+}
