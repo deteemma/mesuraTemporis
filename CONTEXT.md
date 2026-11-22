@@ -5,7 +5,7 @@ les identifiants de code en anglais.
 
 ## L'application
 
-- **Nom** : mesuraTemporis (nom affiché dans l'interface).
+- **Nom** : Mesura Temporis (nom affiché dans l'interface). `mesuraTemporis` reste le nom technique (dépôt, identifiants).
 - **Objectif** : mesurer le temps consommé par chaque Utilisateur sur les Activités des Projets, et en produire des Rapports. Conversion à l'identique de l'application `mesureTemporisMP` ; chaque écart est une décision tracée (ADR 0012+ ou spécification de conversion).
 - **Utilisateurs visés** : les membres d'une équipe qui saisissent leur temps, et les Administrateurs qui gèrent comptes, Projets et équipes.
 - **Entité partagée** : Projet / `project` (son équipe : `project_member`).

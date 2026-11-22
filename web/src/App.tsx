@@ -3,6 +3,7 @@
 import type { User } from 'oidc-client-ts';
 import type { ReactNode } from 'react';
 import { isAdministrator, logout } from './auth';
+import { BrandLogo } from './BrandLogo';
 import { useLanguage } from './i18n/i18n';
 import { LanguageSwitcher } from './LanguageSwitcher';
 import { ACTIVITIES_PATH, ActivitiesPage } from './pages/ActivitiesPage';
@@ -81,10 +82,7 @@ export function App({ user }: { user: User }) {
   return (
     <div className="shell">
       <nav className="sidenav">
-        <div className="sidenav__brand">
-          <span className="sidenav__brand-mark">MT</span>
-          <span className="sidenav__brand-name">mesuraTemporis</span>
-        </div>
+        <BrandLogo />
         <div className="sidenav__links">
           {screens.map((s) => (
             <Link key={s.path} to={s.path} className="sidenav__link">
