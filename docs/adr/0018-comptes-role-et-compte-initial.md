@@ -3,6 +3,7 @@
 - **Statut** : accepté
 - **Date** : 2026-11-14
 - **Remplace** : ADR 0001 de la source (« Compte Administrateur créé automatiquement à l'installation »)
+- **Modifié par** : ADR-0025 (points « Compte initial » et « Protection »)
 
 ## Contexte
 
