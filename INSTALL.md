@@ -56,10 +56,10 @@ realm `monappli` › *Users* › *Add user* (renseigner nom, prénom, e-mail), o
 *Credentials* › *Set password*, onglet *Role mapping* › *Assign role* ›
 `administrateur`.
 
-## 6. Connexion avec Google et Microsoft (facultatif)
+## 6. Connexion avec Google (facultatif)
 
-Chaque fournisseur demande de créer une « application OAuth ». Adresses de retour
-à déclarer (une par fournisseur) :
+Le fournisseur demande de créer une « application OAuth ». Adresse de retour
+à déclarer (la ligne Microsoft ne sert qu'à la section 6.2, non proposée) :
 
 | Fournisseur | Adresse de retour (*redirect URI*) |
 |---|---|
@@ -84,6 +84,9 @@ Chaque fournisseur demande de créer une « application OAuth ». Adresses de re
 
 ### 6.2 Microsoft
 
+> Non proposé par cette application (ADR-0019). Le bouton « Microsoft » reste
+> absent, même si les identifiants ci-dessous sont renseignés.
+
 1. Ouvrez https://portal.azure.com et connectez-vous (un compte Microsoft gratuit suffit).
 2. Recherchez **Microsoft Entra ID** › **Inscriptions d'applications** › **Nouvelle inscription** :
    - nom : `Keycloak monappli` ;
@@ -94,15 +97,13 @@ Chaque fournisseur demande de créer une « application OAuth ». Adresses de re
 5. Copiez immédiatement la colonne **Valeur** (pas « ID du secret ») : elle ne sera plus affichée.
 6. Notez la date d'expiration dans votre agenda : il faudra créer un nouveau secret avant cette date.
 
-### 6.3 Activer les boutons
+### 6.3 Activer le bouton Google
 
 Dans `/opt/applications/monappli/.env`, renseignez :
 
 ```
 GOOGLE_CLIENT_ID=...
 GOOGLE_CLIENT_SECRET=...
-MICROSOFT_CLIENT_ID=...
-MICROSOFT_CLIENT_SECRET=...
 ```
 
 puis réappliquez le realm :
@@ -111,8 +112,13 @@ puis réappliquez le realm :
 bash /opt/socle/scripts/appliquer-realm.sh monappli /opt/applications/monappli/.env
 ```
 
-Les boutons « Google » et « Microsoft » apparaissent sur la page de connexion.
-Un fournisseur dont l'identifiant reste vide est désactivé.
+Le bouton « Google » apparaît sur la page de connexion. Tant que l'identifiant
+reste vide, il est désactivé.
+
+À la première connexion Google, un Utilisateur est créé (rôle `utilisateur`,
+aucun Projet, Login = Email) ou rattaché à l'Utilisateur de même Email, sans
+page de profil. Un compte Google dont l'email n'est pas vérifié est refusé.
+Ces réglages (ADR-0019) sont livrés dans le realm : rien à configurer dans Keycloak.
 
 ## Mettre à jour
 
