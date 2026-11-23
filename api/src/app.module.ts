@@ -16,6 +16,7 @@ import { ReportsController } from './reports/reports.controller.js';
 import { ReportsService } from './reports/reports.service.js';
 import { TimeEntriesController } from './time-entries/time-entries.controller.js';
 import { TimeEntriesService } from './time-entries/time-entries.service.js';
+import { AdmissionController } from './users/admission.controller.js';
 import { UsersController } from './users/users.controller.js';
 import { UsersService } from './users/users.service.js';
 
@@ -28,6 +29,7 @@ import { UsersService } from './users/users.service.js';
     TimeEntriesController,
     ReportsController,
     UsersController,
+    AdmissionController,
   ],
   providers: [
     { provide: AppConfig, useFactory: () => new AppConfig() },

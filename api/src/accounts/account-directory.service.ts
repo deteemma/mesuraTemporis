@@ -38,6 +38,18 @@ export class AccountDirectory {
     return isAdministrator(roles.map((role) => role.name));
   }
 
+  /**
+   * Fournisseurs d'identité (alias Keycloak : google, microsoft) liés au
+   * compte, vide pour un compte à mot de passe. Un compte absent n'en a aucun.
+   */
+  async identityProviders(userId: string): Promise<string[]> {
+    const response = await this.get(`${userPath(userId)}/federated-identity`);
+    if (response.status === 404) return [];
+    await ensureOk(response);
+    const links = (await response.json()) as { identityProvider: string }[];
+    return links.map((link) => link.identityProvider);
+  }
+
   /** Identifiants des comptes qui portent directement le rôle Administrateur. */
   async administratorIds(): Promise<Set<string>> {
     const ids = new Set<string>();

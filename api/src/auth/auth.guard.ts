@@ -3,12 +3,14 @@ import { Reflector } from '@nestjs/core';
 import type { FastifyRequest } from 'fastify';
 import { accessDenied } from '../errors.js';
 import { UsersService } from '../users/users.service.js';
-import { ADMIN_REQUIRED, IS_PUBLIC } from './authenticated-user.js';
+import { ADMIN_REQUIRED, IS_PUBLIC, PENDING_ALLOWED } from './authenticated-user.js';
 import { OidcVerifier } from './oidc-verifier.service.js';
 
 /**
  * Guard global : toute route exige un jeton valide, sauf celles marquées
- * @Public(). Les routes marquées @RequireAdmin() exigent l'Administrateur.
+ * @Public(). Une personne dont la Demande d'accès est en attente n'atteint que
+ * les routes marquées @AllowPending() (ADR-0028). Les routes marquées
+ * @RequireAdmin() exigent l'Administrateur.
  */
 @Injectable()
 export class AuthGuard implements CanActivate {
@@ -31,7 +33,11 @@ export class AuthGuard implements CanActivate {
     } catch {
       throw new UnauthorizedException();
     }
-    await this.users.remember(request.user, token);
+    const admission = await this.users.admit(request.user, token);
+    request.admission = admission;
+    if (admission.status !== 'admitted' && !this.reflector.getAllAndOverride<boolean>(PENDING_ALLOWED, targets)) {
+      throw accessDenied();
+    }
 
     if (this.reflector.getAllAndOverride<boolean>(ADMIN_REQUIRED, targets) && !request.user.isAdmin) {
       throw accessDenied();

@@ -94,6 +94,9 @@ export const en: Record<UiKey, string> = {
   CONFIRMER_PROJET: 'Delete project "{nom}"? Its {activites} activities and the {imputations} related time entries will be permanently deleted.',
   CONFIRMER_ACTIVITE: 'Delete activity "{nom}"? The {imputations} related time entries will be permanently deleted.',
   CONFIRMER_UTILISATEUR: 'Delete user "{nom}"? Their sign-in account and their {imputations} time entries will be permanently deleted.',
+  ATTENTE_TITRE: 'Access request recorded',
+  ATTENTE_MESSAGE: 'Your access request has been recorded. An administrator must approve it before you can use the application.',
+  ATTENTE_EMAIL: 'Email: {email}',
 };
 
 // Codes d'erreur (ADR-0021) : l'indexation par ErrorCode garantit, à la

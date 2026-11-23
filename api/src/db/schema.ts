@@ -46,8 +46,19 @@ export interface TimeEntryTable {
   ended_at: ColumnType<Date | null, Date | string | null | undefined, Date | string | null>;
 }
 
+/** Demande d'accès (ADR-0028). */
+export interface AccessRequestTable {
+  account_id: string;
+  email: string | null;
+  display_name: string | null;
+  provider: string;
+  status: Generated<'pending'>;
+  created_at: Generated<Date>;
+}
+
 export interface Database {
   app_user: AppUserTable;
+  access_request: AccessRequestTable;
   project: ProjectTable;
   project_member: ProjectMemberTable;
   activity: ActivityTable;

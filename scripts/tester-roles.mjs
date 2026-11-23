@@ -1737,10 +1737,136 @@ await check('un autre Administrateur y parvient : « second » est refusé sur l
   assert.equal((await keycloak('GET', `/users/${second.id}`)).status, 404);
 });
 
+console.log('\nDemande d’accès à la première connexion Google (ADR-0028)');
+/**
+ * Compte tel que le crée la première connexion Google dans Keycloak (lien au
+ * fournisseur « google », Login = Email), avec le mot de passe Test1234! pour
+ * obtenir un jeton dans ce contrôle. Ne passe pas par l'API.
+ */
+async function googleAccount(prefix) {
+  const email = `${prefix}-${RUN}@gmail.test`;
+  const r = await keycloak('POST', '/users', { username: email, email, emailVerified: true, firstName: 'Nom Google', enabled: true });
+  assert.equal(r.status, 201, JSON.stringify(r.body));
+  const { id } = (await keycloak('GET', `/users?username=${encodeURIComponent(email)}&exact=true`)).body[0];
+  createdAccounts.push(id);
+  const link = await keycloak('POST', `/users/${id}/federated-identity/google`, { identityProvider: 'google', userId: `g-${prefix}-${RUN}`, userName: email });
+  assert.equal(link.status, 204, `lien Google : ${JSON.stringify(link.body)}`);
+  await keycloak('PUT', `/users/${id}/reset-password`, { type: 'password', value: 'Test1234!', temporary: false });
+  return { ...(await login(email)), id, email };
+}
+const requestOf = async (id) =>
+  (await query(diane, `SELECT email, display_name, provider, status, created_at FROM access_request WHERE account_id = $1`, [id])).rows[0];
+const userRowOf = async (id) => (await query(diane, `SELECT id FROM app_user WHERE id = $1`, [id])).rowCount;
+
+const applicant = {};
+await check('un nouveau compte Google crée une Demande d’accès en attente (Email, Nom, fournisseur, date), aucun Utilisateur', async () => {
+  Object.assign(applicant, await googleAccount('candidat'));
+  const before = Date.now();
+  const r = await call(applicant, 'GET', '/admission');
+  assert.equal(r.status, 200);
+  assert.deepEqual(r.body, { status: 'pending', email: applicant.email });
+  const request = await requestOf(applicant.id);
+  assert.ok(request, 'aucune Demande d’accès');
+  assert.equal(request.email, applicant.email);
+  assert.equal(request.display_name, 'Nom Google');
+  assert.equal(request.provider, 'google');
+  assert.equal(request.status, 'pending');
+  assert.ok(Math.abs(request.created_at.getTime() - before) < 60_000);
+  assert.equal(await userRowOf(applicant.id), 0);
+  assert.ok(!(await usersList()).users.some((u) => u.id === applicant.id), 'absent de l’écran Utilisateurs');
+});
+await check('la personne en attente : toute autre route lui répond 403 ACCES_REFUSE, sans créer d’Utilisateur', async () => {
+  const attempts = [
+    ['GET', '/projects'],
+    ['POST', '/projects', { name: `Pirate ${RUN}` }],
+    ['GET', `/projects/${data.p1}`],
+    ['GET', '/activities/search?q=a'],
+    ['GET', '/time-entries/timer'],
+    ['POST', '/time-entries/timer/start', { projectId: data.p1, activityId: data.a1 }],
+    ['GET', '/time-entries/today'],
+    ['GET', '/time-entries/history'],
+    ['GET', '/reports/projects'],
+    ['GET', '/reports/daily'],
+    ['GET', '/users'],
+    ['POST', '/users', { login: `pirate-${RUN}`, email: `pirate-${RUN}@exemple.test` }],
+    ['PATCH', `/time-entries/${data.aliceEntry}`, { endedAt: new Date().toISOString() }],
+    ['DELETE', `/time-entries/${data.aliceEntry}`],
+    ['DELETE', `/projects/${data.p2}`],
+  ];
+  for (const [method, path, body] of attempts) {
+    const r = await call(applicant, method, path, body);
+    assert.equal(r.status, 403, `${method} ${path}`);
+    assert.equal(r.body.code, 'ACCES_REFUSE', `${method} ${path}`);
+  }
+  Object.assign(applicant, await login(applicant.email));
+  assert.equal((await call(applicant, 'GET', '/projects')).status, 403, 'nouveau jeton : toujours en attente');
+  assert.equal((await call(applicant, 'GET', '/admission')).body.status, 'pending');
+  assert.equal(await userRowOf(applicant.id), 0);
+  assert.equal((await query(diane, `SELECT count(*)::int AS n FROM access_request WHERE account_id = $1`, [applicant.id])).rows[0].n, 1);
+});
+await check('un Utilisateur admis lit son admission : « admitted »', async () => {
+  assert.deepEqual((await call(alice, 'GET', '/admission')).body, { status: 'admitted' });
+});
+await check('création d’un Utilisateur avec l’Email d’une Demande d’accès, casse ignorée → 409 EMAIL_EXISTANT ; rien n’est créé', async () => {
+  const r = created(await call(diane, 'POST', '/users', { login: `reserve-${RUN}`, email: applicant.email.toUpperCase() }));
+  assert.equal(r.status, 409);
+  assert.equal(r.body.code, 'EMAIL_EXISTANT');
+  assert.equal((await keycloak('GET', `/users?username=reserve-${RUN}&exact=true`)).body.length, 0);
+});
+await check('Keycloak refuse tout autre compte avec l’Email d’une Demande d’accès (409)', async () => {
+  const r = await keycloak('POST', '/users', { username: `autre-compte-${RUN}`, email: applicant.email, enabled: true });
+  assert.equal(r.status, 409);
+  assert.equal((await keycloak('GET', `/users?username=autre-compte-${RUN}&exact=true`)).body.length, 0);
+});
+await check('RLS : la personne en attente ne voit que sa demande ; alice n’en voit aucune ; l’Administrateur les voit', async () => {
+  const pendingActor = { sub: applicant.id, isAdmin: false };
+  assert.deepEqual((await query(pendingActor, `SELECT account_id FROM access_request`)).rows.map((r) => r.account_id), [applicant.id]);
+  assert.equal((await query(alice, `SELECT account_id FROM access_request`)).rowCount, 0);
+  assert.equal((await query(nobody, `SELECT account_id FROM access_request`)).rowCount, 0);
+  assert.equal((await query(diane, `SELECT account_id FROM access_request WHERE account_id = $1`, [applicant.id])).rowCount, 1);
+});
+await check('RLS : nul ne crée la demande d’un autre, ni un Utilisateur la sienne ; la personne en attente ne supprime pas la sienne', async () => {
+  await assert.rejects(
+    query(alice, `INSERT INTO access_request (account_id, email, provider) VALUES ($1, $2, 'google')`, [alice.sub, `alice-${RUN}@gmail.test`]),
+    /row-level security/,
+  );
+  await assert.rejects(
+    query(alice, `INSERT INTO access_request (account_id, email, provider) VALUES ($1, $2, 'google')`, [`autre-${RUN}`, `autre-${RUN}@gmail.test`]),
+    /row-level security/,
+  );
+  await assert.rejects(
+    query(diane, `INSERT INTO access_request (account_id, email, provider) VALUES ($1, $2, 'google')`, [`autre-${RUN}`, `autre-${RUN}@gmail.test`]),
+    /row-level security/,
+  );
+  const r = await query({ sub: applicant.id, isAdmin: false }, `DELETE FROM access_request WHERE account_id = $1`, [applicant.id]);
+  assert.equal(r.rowCount, 0);
+});
+
+const veteran = {};
+await check('un Utilisateur né de Google avant la mise en service continue d’entrer normalement, sans Demande d’accès', async () => {
+  Object.assign(veteran, await googleAccount('ancien'));
+  // Sa ligne Utilisateur existait avant l'ADR-0028.
+  await inDb(diane, (q) => q(`INSERT INTO app_user (id, login, email) VALUES ($1, $2, $2)`, [veteran.id, veteran.email]), { commit: true });
+  assert.equal((await call(veteran, 'GET', '/projects')).status, 200);
+  assert.deepEqual((await call(veteran, 'GET', '/admission')).body, { status: 'admitted' });
+  assert.equal(await requestOf(veteran.id), undefined);
+});
+await check('un Utilisateur né de Google supprimé qui se reconnecte crée une nouvelle Demande d’accès', async () => {
+  assert.equal((await call(diane, 'DELETE', `/users/${veteran.id}`)).status, 204);
+  // Reconnexion par Google : Keycloak recrée le compte, sous un nouvel identifiant.
+  const back = await googleAccount('ancien');
+  assert.notEqual(back.id, veteran.id);
+  assert.deepEqual((await call(back, 'GET', '/admission')).body, { status: 'pending', email: back.email });
+  assert.equal((await call(back, 'GET', '/projects')).status, 403);
+  assert.equal((await requestOf(back.id)).status, 'pending');
+  assert.equal(await userRowOf(back.id), 0);
+});
+
 console.log('\nNettoyage');
 await check('suppression des Projets et Utilisateurs de test', async () => {
   await inDb(diane, async (q) => {
     await q(`DELETE FROM app_user WHERE id = $1 OR id = ANY($2)`, [`test-cascade-${RUN}`, createdAccounts]);
+    await q(`DELETE FROM access_request WHERE account_id = ANY($1)`, [createdAccounts]);
     await q(`DELETE FROM project WHERE id = ANY($1) OR name = $2`, [[data.p1, data.p2, p3, p4, fixture.p5, fixture.p6, removal.p7, removal.p8, mine.p9, mine.p10, rep.p11, rep.p12, p13, demotion.p14, demotion.p15].filter(Boolean), 'L'.repeat(1000)]);
   }, { commit: true });
   for (const id of createdAccounts) await keycloak('DELETE', `/users/${id}`);

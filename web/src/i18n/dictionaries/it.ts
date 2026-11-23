@@ -94,6 +94,9 @@ export const it: Record<UiKey, string> = {
   CONFIRMER_PROJET: 'Eliminare il Progetto «{nom}»? Le sue {activites} Attività e le {imputations} voci associate saranno eliminate definitivamente.',
   CONFIRMER_ACTIVITE: "Eliminare l'Attività «{nom}»? Le {imputations} voci associate saranno eliminate definitivamente.",
   CONFIRMER_UTILISATEUR: "Eliminare l'Utente «{nom}»? Il suo account di accesso e le sue {imputations} voci saranno eliminati definitivamente.",
+  ATTENTE_TITRE: 'Richiesta di accesso registrata',
+  ATTENTE_MESSAGE: "La sua richiesta di accesso è stata registrata. Deve essere approvata da un amministratore prima che possa usare l'applicazione.",
+  ATTENTE_EMAIL: 'Email: {email}',
 };
 
 // Codes d'erreur (ADR-0021) : l'indexation par ErrorCode garantit, à la

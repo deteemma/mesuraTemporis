@@ -1342,3 +1342,34 @@ select {
 .rapport__jour-titre {
   font-size: var(--text-lg);
 }
+
+/* Page d'attente d'une Demande d'accès (ADR-0028) */
+
+.waiting {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-5) 16px;
+}
+
+.waiting__card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  max-width: 480px;
+  width: 100%;
+  padding: var(--space-6) var(--space-5);
+}
+
+.waiting__email {
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.waiting__actions {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--space-3);
+}

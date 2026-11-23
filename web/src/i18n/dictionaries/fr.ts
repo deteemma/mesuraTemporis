@@ -93,6 +93,9 @@ export const fr = {
   CONFIRMER_PROJET: 'Supprimer le Projet « {nom} » ? Ses {activites} Activités et les {imputations} Imputations associées seront supprimées définitivement.',
   CONFIRMER_ACTIVITE: "Supprimer l'Activité « {nom} » ? Les {imputations} Imputations associées seront supprimées définitivement.",
   CONFIRMER_UTILISATEUR: "Supprimer l'Utilisateur « {nom} » ? Son compte de connexion et ses {imputations} Imputations seront supprimés définitivement.",
+  ATTENTE_TITRE: "Demande d'accès enregistrée",
+  ATTENTE_MESSAGE: "Votre demande d'accès est enregistrée. Elle doit être validée par un Administrateur avant que vous puissiez utiliser l'application.",
+  ATTENTE_EMAIL: 'Email : {email}',
 };
 
 export type UiKey = keyof typeof fr;

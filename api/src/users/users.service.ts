@@ -1,5 +1,13 @@
 import { Injectable } from '@nestjs/common';
-import { accountActionRefusal, type CreateUserInput, type UserDto, type UserImpactDto, type UserListDto } from '@app/shared';
+import {
+  accountActionRefusal,
+  type AdmissionDto,
+  arrivalOf,
+  type CreateUserInput,
+  type UserDto,
+  type UserImpactDto,
+  type UserListDto,
+} from '@app/shared';
 import { sql } from 'kysely';
 import { type Account, AccountDirectory } from '../accounts/account-directory.service.js';
 import type { AuthenticatedUser } from '../auth/authenticated-user.js';
@@ -10,35 +18,74 @@ import { accountActionRefused, emailTaken, isUniqueViolation, loginTaken, userNo
 const UNIQUE_LOGIN_INDEX = 'app_user_login_key';
 const UNIQUE_EMAIL_INDEX = 'app_user_email_key';
 
+const ADMITTED: AdmissionDto = { status: 'admitted' };
+const pending = (email: string | null): AdmissionDto => ({ status: 'pending', email });
+
 /**
  * Utilisateurs : la ligne app_user en base et le compte de connexion de
  * l'Annuaire des comptes (Keycloak), tenus ensemble (ADR-0018).
  *
  * À chaque nouveau jeton, recopie dans app_user le Login, l'Email et le Nom du
- * compte. Crée la ligne d'un compte né de Google à sa première requête.
+ * compte. Un compte arrivé par Google ou Microsoft n'a pas de ligne : sa
+ * première requête crée une Demande d'accès (ADR-0028).
  */
 @Injectable()
 export class UsersService {
-  // Dernier jeton recopié par Utilisateur : un même jeton n'est recopié qu'une fois.
-  private readonly lastToken = new Map<string, string>();
+  // Dernier jeton traité par compte, et son admission : un même jeton n'est traité qu'une fois.
+  private readonly lastToken = new Map<string, { token: string; admission: AdmissionDto }>();
 
   constructor(
     private readonly database: DatabaseService,
     private readonly accounts: AccountDirectory,
   ) {}
 
-  async remember(user: AuthenticatedUser, token: string): Promise<void> {
-    if (this.lastToken.get(user.id) === token) return;
+  /**
+   * Admission de la personne du jeton (ADR-0028), et recopie de sa ligne
+   * Utilisateur :
+   * - Utilisateur connu : sa ligne est remise à jour ; admis ;
+   * - Demande d'accès déjà enregistrée : en attente ;
+   * - compte inconnu : selon `arrivalOf`, Demande d'accès en attente (arrivée
+   *   par Google ou Microsoft) ou ligne Utilisateur créée (admis).
+   */
+  async admit(user: AuthenticatedUser, token: string): Promise<AdmissionDto> {
+    const known = this.lastToken.get(user.id);
+    if (known?.token === token) return known.admission;
 
-    const values = { login: user.login, email: user.email, display_name: user.displayName };
-    await this.database.asUser(user, (tx) =>
-      tx
+    const admission = await this.database.asUser(user, async (tx) => {
+      const values = { login: user.login, email: user.email, display_name: user.displayName };
+      const updated = await tx
+        .updateTable('app_user')
+        .set({ ...values, updated_at: sql`now()` })
+        .where('id', '=', user.id)
+        .executeTakeFirst();
+      if (updated.numUpdatedRows > 0n) return ADMITTED;
+
+      const request = await tx
+        .selectFrom('access_request')
+        .select('email')
+        .where('account_id', '=', user.id)
+        .executeTakeFirst();
+      if (request) return pending(request.email);
+
+      const arrival = arrivalOf(await this.accounts.identityProviders(user.id));
+      if (arrival.kind === 'access-request') {
+        // Requêtes simultanées du même premier jeton : une seule demande.
+        await tx
+          .insertInto('access_request')
+          .values({ account_id: user.id, email: user.email, display_name: user.displayName, provider: arrival.provider })
+          .onConflict((oc) => oc.column('account_id').doNothing())
+          .execute();
+        return pending(user.email);
+      }
+      await tx
         .insertInto('app_user')
         .values({ id: user.id, ...values })
         .onConflict((oc) => oc.column('id').doUpdateSet({ ...values, updated_at: sql`now()` }))
-        .execute(),
-    );
-    this.lastToken.set(user.id, token);
+        .execute();
+      return ADMITTED;
+    });
+    this.lastToken.set(user.id, { token, admission });
+    return admission;
   }
 
   /**
@@ -71,9 +118,18 @@ export class UsersService {
   /**
    * Crée le compte dans l'Annuaire, puis la ligne Utilisateur : il est
    * affectable avant sa première connexion. Si la base échoue, le compte est
-   * supprimé de l'Annuaire (pas de compte orphelin).
+   * supprimé de l'Annuaire (pas de compte orphelin). L'Email d'une Demande
+   * d'accès est réservé : `EMAIL_EXISTANT` (ADR-0028).
    */
   async create(user: AuthenticatedUser, input: CreateUserInput): Promise<UserDto> {
+    const reserved = await this.database.asUser(user, (tx) =>
+      tx
+        .selectFrom('access_request')
+        .select('account_id')
+        .where(sql<string>`lower(email)`, '=', input.email.toLowerCase())
+        .executeTakeFirst(),
+    );
+    if (reserved) throw emailTaken();
     const account = await this.accounts.createAccount(input);
     try {
       await this.database.asUser(user, (tx) =>

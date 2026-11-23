@@ -94,6 +94,9 @@ export const de: Record<UiKey, string> = {
   CONFIRMER_PROJET: 'Projekt „{nom}“ löschen? Seine {activites} Aktivitäten und die {imputations} zugehörigen Einträge werden endgültig gelöscht.',
   CONFIRMER_ACTIVITE: 'Aktivität „{nom}“ löschen? Die {imputations} zugehörigen Einträge werden endgültig gelöscht.',
   CONFIRMER_UTILISATEUR: 'Benutzer „{nom}“ löschen? Sein Anmeldekonto und seine {imputations} Einträge werden endgültig gelöscht.',
+  ATTENTE_TITRE: 'Zugriffsanfrage erfasst',
+  ATTENTE_MESSAGE: 'Ihre Zugriffsanfrage wurde erfasst. Ein Administrator muss sie genehmigen, bevor Sie die Anwendung nutzen können.',
+  ATTENTE_EMAIL: 'E-Mail: {email}',
 };
 
 // Codes d'erreur (ADR-0021) : l'indexation par ErrorCode garantit, à la
