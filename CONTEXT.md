@@ -19,11 +19,12 @@ les identifiants de code en anglais.
 
 | Français | Code (anglais) | Définition | À éviter |
 |---|---|---|---|
-| Utilisateur | `app_user` | Personne disposant d'un compte, qui peut saisir du temps. Naît de l'écran Utilisateurs ou d'une première connexion Google. | Membre, employé |
+| Utilisateur | `app_user` | Personne disposant d'un compte, qui peut saisir du temps. Naît de l'écran Utilisateurs ou de l'acceptation d'une Demande d'accès. | Membre, employé |
+| Demande d'accès | `access_request` | Créée par la première connexion Google ou Microsoft d'une personne inconnue. Elle n'est pas un Utilisateur : en attente, elle n'ouvre aucun écran ni aucune donnée. Acceptée par un Administrateur, elle devient un Utilisateur ; refusée, elle reste bloquée jusqu'à ce qu'un Administrateur l'accepte ou la supprime. | Inscription, compte en attente |
 | Administrateur | `administrateur` (rôle Keycloak) | Utilisateur qui gère comptes, Projets, Activités et équipes, et voit toutes les Imputations. Il garde tous les droits d'un Utilisateur ; ce n'est pas un compte séparé. | Admin, manager, chef de projet |
 | Compte initial | `admin` | Compte Administrateur créé avec le realm, à l'installation seulement. Il n'est pas protégé : comme tout Administrateur, il peut perdre son rôle ou être supprimé, et une mise à jour ne le recrée pas (ADR-0025). | Super-admin, compte racine |
-| Login | `login` | Identifiant de connexion par mot de passe, choisi par l'Administrateur, distinct de l'Email et non modifiable. Pour un compte né de Google, c'est son Email. | Identifiant email, nom d'utilisateur |
-| Email | `email` | Adresse unique d'un Utilisateur. Une première connexion Google dont l'Email est déjà pris est refusée : aucun rattachement (ADR-0024). | Adresse mail, courriel |
+| Login | `login` | Identifiant de connexion par mot de passe, choisi par l'Administrateur, distinct de l'Email et non modifiable. Pour un compte né de Google ou de Microsoft, c'est son Email. | Identifiant email, nom d'utilisateur |
+| Email | `email` | Adresse unique d'un Utilisateur. Une première connexion Google ou Microsoft dont l'Email est déjà pris, ou réservé par une Demande d'accès, est refusée : aucun rattachement (ADR-0024, ADR-0028). | Adresse mail, courriel |
 | Nom | `name` | Nom affiché d'un Utilisateur, en un seul champ, facultatif. | Prénom / nom de famille |
 | Annuaire des comptes | `AccountDirectory` | Source de vérité des comptes de connexion et de leur rôle (Keycloak), interrogée par l'application. Un compte absent de l'Annuaire n'a aucun rôle. | Keycloak (dans l'interface), annuaire LDAP |
 

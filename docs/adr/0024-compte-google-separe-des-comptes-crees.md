@@ -3,6 +3,7 @@
 - **Statut** : accepté (validé par la responsable fonctionnelle le 2026-11-22)
 - **Date** : 2026-11-22
 - **Modifie** : ADR-0019 (rattachement par Email à la première connexion Google)
+- **Modifié par** : ADR-0028 (règles étendues à Microsoft)
 
 ## Contexte
 

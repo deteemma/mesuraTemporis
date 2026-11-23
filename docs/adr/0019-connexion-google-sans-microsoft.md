@@ -3,6 +3,7 @@
 - **Statut** : accepté
 - **Date** : 2026-11-14
 - **Reprend** : ADR 0009 de la source ; **écart** à l'ADR-0005 (Microsoft)
+- **Modifié par** : ADR-0024 (rattachement), ADR-0028 (admission par Demande d'accès, ouverture de Microsoft)
 
 ## Contexte
 
