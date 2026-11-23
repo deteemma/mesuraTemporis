@@ -39,6 +39,17 @@ bash scripts/ajouter-application.sh monappli /opt/applications/monappli
 Le script crée la base et ses comptes, la route `https://monappli.exemple.ch`,
 le realm Keycloak, et remplit `/opt/applications/monappli/.env`.
 
+Deux variables de ce `.env` peuvent rester vides. Elles servent à l'API pour
+gérer les comptes dans Keycloak (écran Utilisateurs) :
+
+| Variable | Vide = valeur par défaut |
+|---|---|
+| `KEYCLOAK_ADMIN_URL` | adresse déduite de `OIDC_JWKS_URL` : `<keycloak>/admin/realms/<realm>` |
+| `KEYCLOAK_ADMIN_CLIENT_ID` | `api-admin`, le compte de service déclaré dans le realm |
+
+Renseignez-les seulement si le socle publie l'administration de Keycloak à une
+autre adresse, ou sous un autre compte de service.
+
 ## 4. Déployer une version
 
 ```bash

@@ -41,7 +41,7 @@ CREATE UNIQUE INDEX app_user_email_key ON app_user (lower(email));
 CREATE TABLE project (
   id         uuid PRIMARY KEY,
   name       text NOT NULL CHECK (btrim(name) <> ''),
-  status     text NOT NULL DEFAULT 'actif',   -- badge « actif », jamais modifié
+  status     text NOT NULL DEFAULT 'active',  -- badge « actif » (dictionnaire du web), jamais modifié
   created_at timestamptz NOT NULL DEFAULT now(),
   updated_at timestamptz NOT NULL DEFAULT now()
 );

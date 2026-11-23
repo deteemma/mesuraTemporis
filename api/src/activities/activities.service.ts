@@ -9,12 +9,11 @@ import {
   type RenameActivityInput,
 } from '@app/shared';
 import { sql } from 'kysely';
-import { z } from 'zod';
 import type { AuthenticatedUser } from '../auth/authenticated-user.js';
-import { DatabaseService, type Tx } from '../db/database.service.js';
-import { activityNameDuplicate, activityNotFound, isUniqueViolation, projectNotFound } from '../errors.js';
-
-const uuid = z.uuid();
+import { DatabaseService } from '../db/database.service.js';
+import { assertProjectExists, countTimeEntries, isProjectMember } from '../db/queries.js';
+import { activityNameDuplicate, activityNotFound, isUniqueViolation } from '../errors.js';
+import { assertUuid } from '../identifiers.js';
 
 /** Index de la base qui garantit l'unicité normalisée des noms dans un Projet (E21). */
 const UNIQUE_NAME_INDEX = 'activity_project_name_key';
@@ -59,15 +58,7 @@ export class ActivitiesService {
         .select(['a.id', 'a.name', 'a.project_id', 'p.name as project_name'])
         .where(sql<boolean>`position(${normalized} in a.normalized_name) > 0`);
       if (!user.isAdmin) {
-        query = query.where((eb) =>
-          eb.exists(
-            eb
-              .selectFrom('project_member as m')
-              .select('m.project_id')
-              .whereRef('m.project_id', '=', 'a.project_id')
-              .where('m.user_id', '=', user.id),
-          ),
-        );
+        query = query.where((eb) => isProjectMember(eb.ref('a.project_id'), user.id));
       }
       const rows = await query.orderBy('p.name').orderBy('a.created_at').orderBy('a.id').execute();
       return rows.map((row) => ({ id: row.id, name: row.name, projectId: row.project_id, projectName: row.project_name }));
@@ -98,13 +89,13 @@ export class ActivitiesService {
    * Renommage (Administrateur ou Affecté, ADR-0015). Reconfirmer le nom actuel,
    * ou en changer la casse, n'entre pas en collision avec l'Activité elle-même.
    */
-  rename(
+  async rename(
     user: AuthenticatedUser,
     projectId: string,
     activityId: string,
     input: RenameActivityInput,
   ): Promise<ActivityDto> {
-    if (!uuid.safeParse(activityId).success) return Promise.reject(activityNotFound());
+    assertUuid(activityId, activityNotFound);
     return withUniqueName(() =>
       this.database.asUser(user, async (tx) => {
         await assertProjectExists(tx, projectId);
@@ -122,8 +113,8 @@ export class ActivitiesService {
   }
 
   /** Emporte les Imputations de l'Activité (Chronomètres compris), par cascade en base. */
-  remove(user: AuthenticatedUser, projectId: string, activityId: string): Promise<void> {
-    if (!uuid.safeParse(activityId).success) return Promise.reject(activityNotFound());
+  async remove(user: AuthenticatedUser, projectId: string, activityId: string): Promise<void> {
+    assertUuid(activityId, activityNotFound);
     return this.database.asUser(user, async (tx) => {
       await assertProjectExists(tx, projectId);
       const result = await tx
@@ -136,8 +127,8 @@ export class ActivitiesService {
   }
 
   /** Ce que détruirait la suppression de l'Activité, pour le dialogue chiffré. */
-  impact(user: AuthenticatedUser, projectId: string, activityId: string): Promise<ActivityImpactDto> {
-    if (!uuid.safeParse(activityId).success) return Promise.reject(activityNotFound());
+  async impact(user: AuthenticatedUser, projectId: string, activityId: string): Promise<ActivityImpactDto> {
+    assertUuid(activityId, activityNotFound);
     return this.database.asUser(user, async (tx) => {
       await assertProjectExists(tx, projectId);
       const activity = await tx
@@ -147,19 +138,9 @@ export class ActivitiesService {
         .where('project_id', '=', projectId)
         .executeTakeFirst();
       if (!activity) throw activityNotFound();
-      const { timeEntries } = await tx
-        .selectFrom('time_entry')
-        .select((eb) => eb.fn.countAll<string>().as('timeEntries'))
-        .where('activity_id', '=', activityId)
-        .executeTakeFirstOrThrow();
-      return { timeEntries: Number(timeEntries) };
+      return { timeEntries: await countTimeEntries(tx, 'activity_id', activityId) };
     });
   }
-}
-
-async function assertProjectExists(tx: Tx, projectId: string): Promise<void> {
-  const row = await tx.selectFrom('project').select('id').where('id', '=', projectId).executeTakeFirst();
-  if (!row) throw projectNotFound();
 }
 
 /** Traduit la violation de l'index d'unicité normalisée en 409 `ACTIVITE_NOM_DUPLIQUE`. */

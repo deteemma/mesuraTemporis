@@ -154,7 +154,7 @@ await check('diane (Administrateur) liste tous les Projets, affectée ou non', a
 await check('alice (Affectée) lit P1 : 200, badge « actif »', async () => {
   const r = await call(alice, 'GET', `/projects/${data.p1}`);
   assert.equal(r.status, 200);
-  assert.equal(r.body.status, 'actif');
+  assert.equal(r.body.status, 'active');
 });
 await check('chloé (non affectée) lit P1 : 404 PROJET_INTROUVABLE', async () => {
   const r = await call(chloe, 'GET', `/projects/${data.p1}`);
@@ -178,7 +178,7 @@ await check('diane crée un Projet par son seul nom : 201, badge « actif », é
   const r = await call(diane, 'POST', '/projects', { name: `  P3 ${RUN}  ` });
   assert.equal(r.status, 201);
   assert.equal(r.body.name, `P3 ${RUN}`);
-  assert.equal(r.body.status, 'actif');
+  assert.equal(r.body.status, 'active');
   p3 = r.body.id;
   assert.deepEqual((await call(diane, 'GET', `/projects/${p3}/members`)).body, []);
 });
@@ -1348,12 +1348,13 @@ await check('chloé (non affectée) exporte une feuille sans ces lignes ; sans �
 
 console.log('\nÉcran Utilisateurs : Annuaire des comptes (Keycloak) et base');
 // Accès direct à l'Annuaire par le compte de service, pour observer Keycloak.
-const KEYCLOAK_ADMIN = env.OIDC_JWKS_URL.replace(/\/realms\/([^/]+)\/protocol\/openid-connect\/certs$/, '/admin/realms/$1');
+const KEYCLOAK_ADMIN =
+  env.KEYCLOAK_ADMIN_URL || env.OIDC_JWKS_URL.replace(/\/realms\/([^/]+)\/protocol\/openid-connect\/certs$/, '/admin/realms/$1');
 const keycloak = async (method, path, body) => {
   const tokenResponse = await fetch(TOKEN_URL, {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    body: new URLSearchParams({ grant_type: 'client_credentials', client_id: 'api-admin', client_secret: env.KEYCLOAK_ADMIN_CLIENT_SECRET }),
+    body: new URLSearchParams({ grant_type: 'client_credentials', client_id: env.KEYCLOAK_ADMIN_CLIENT_ID || 'api-admin', client_secret: env.KEYCLOAK_ADMIN_CLIENT_SECRET }),
   });
   const { access_token } = await tokenResponse.json();
   const response = await fetch(`${KEYCLOAK_ADMIN}${path}`, {

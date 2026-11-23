@@ -16,6 +16,7 @@ import {
   type TimeInput,
   type TimerStatusDto,
   dayOf,
+  durationSeconds,
   formatSeconds,
   formatTimeOfDay,
   groupByActivity,
@@ -75,7 +76,7 @@ export function TimeEntryPage() {
     };
   }, [version, notifyError]);
 
-  // Compteur à la seconde, recalculé depuis l'heure de début (jamais une seconde d'avance).
+  // Compteur à la seconde, recalculé depuis l'heure de début, avec le calcul des Durées affichées.
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
     if (!timer) return;
@@ -88,7 +89,7 @@ export function TimeEntryPage() {
       clearInterval(interval);
     };
   }, [timer]);
-  const counter = timer ? formatSeconds(Math.floor((now - new Date(timer.startedAt).getTime()) / 1000)) : '00:00:00';
+  const counter = timer ? formatSeconds(durationSeconds(timer.startedAt, new Date(now))) : '00:00:00';
 
   // --- Champ « Activité » (recherche combinée) ---
   const [field, setField] = useState<ActivityFieldState>(initialActivityFieldState);

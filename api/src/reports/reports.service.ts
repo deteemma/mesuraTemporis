@@ -14,6 +14,7 @@ import {
 } from '@app/shared';
 import type { AuthenticatedUser } from '../auth/authenticated-user.js';
 import { DatabaseService, type Tx } from '../db/database.service.js';
+import { selectTimeEntries, toEntryFields } from '../db/time-entry-rows.js';
 
 /** Restitution des Durées : Mes projets, Rapport et synthèse journalière. */
 @Injectable()
@@ -33,7 +34,7 @@ export class ReportsService {
         tx.selectFrom('project_member').select('project_id').where('user_id', '=', user.id).execute(),
       ]);
       return summarizeMyProjects(
-        rows.map(toEntry),
+        rows.map(toEntryFields),
         memberships.map((m) => m.project_id),
       );
     });
@@ -53,7 +54,7 @@ export class ReportsService {
       if (!user.isAdmin) query = query.where('e.user_id', '=', user.id);
       const rows = await query.execute();
       return buildReport(
-        rows.map((row) => ({ ...toEntry(row), userId: row.user_id, userLogin: row.user_login })),
+        rows.map((row) => ({ ...toEntryFields(row), userId: row.user_id, userLogin: row.user_login })),
         range,
       );
     });
@@ -68,7 +69,7 @@ export class ReportsService {
     const target = isDay(day) ? day : currentDay();
     return this.database.asUser(user, async (tx) => {
       const rows = await selectFinished(tx, { from: target, to: target }).where('e.user_id', '=', user.id).execute();
-      return summarizeDay(rows.map(toEntry), target);
+      return summarizeDay(rows.map(toEntryFields), target);
     });
   }
 }
@@ -78,12 +79,7 @@ export class ReportsService {
  * avec une plage, celles qui commencent dans ses Journées (bornes incluses).
  */
 function selectFinished(tx: Tx, range?: ReportRange) {
-  let query = tx
-    .selectFrom('time_entry as e')
-    .innerJoin('project as p', 'p.id', 'e.project_id')
-    .innerJoin('activity as a', 'a.id', 'e.activity_id')
-    .select(['e.user_id', 'e.project_id', 'p.name as project_name', 'e.activity_id', 'a.name as activity_name', 'e.started_at', 'e.ended_at'])
-    .where('e.ended_at', 'is not', null);
+  let query = selectTimeEntries(tx).where('e.ended_at', 'is not', null);
   if (range) {
     query = query
       .where('e.started_at', '>=', dayBounds(range.from).start)
@@ -91,21 +87,3 @@ function selectFinished(tx: Tx, range?: ReportRange) {
   }
   return query;
 }
-
-interface FinishedRow {
-  project_id: string;
-  project_name: string;
-  activity_id: string;
-  activity_name: string;
-  started_at: Date;
-  ended_at: Date | null;
-}
-
-const toEntry = (row: FinishedRow) => ({
-  projectId: row.project_id,
-  projectName: row.project_name,
-  activityId: row.activity_id,
-  activityName: row.activity_name,
-  startedAt: row.started_at.toISOString(),
-  endedAt: row.ended_at ? row.ended_at.toISOString() : null,
-});

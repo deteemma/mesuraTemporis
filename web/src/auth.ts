@@ -1,5 +1,5 @@
 // Connexion OIDC (code + PKCE) au realm Keycloak de l'application (ADR-0005).
-import { APP_ADMIN_ROLE, type PublicConfigDto } from '@app/shared';
+import { isAdministrator as hasAdministratorRole, type PublicConfigDto } from '@app/shared';
 import { UserManager, WebStorageStateStore, type User } from 'oidc-client-ts';
 import { initialLanguage } from './i18n/languages';
 
@@ -76,7 +76,7 @@ export function isAdministrator(user: User): boolean {
     const payload = user.access_token.split('.')[1] ?? '';
     const base64 = payload.replace(/-/g, '+').replace(/_/g, '/');
     const claims = JSON.parse(atob(base64)) as { realm_access?: { roles?: string[] } };
-    return claims.realm_access?.roles?.includes(APP_ADMIN_ROLE) ?? false;
+    return hasAdministratorRole(claims.realm_access?.roles ?? []);
   } catch {
     return false;
   }

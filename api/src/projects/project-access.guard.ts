@@ -13,6 +13,7 @@ import { sql } from 'kysely';
 import { z } from 'zod';
 import { DatabaseService } from '../db/database.service.js';
 import { accessDenied, projectNotFound } from '../errors.js';
+import { assertUuid } from '../identifiers.js';
 import { ZodValidationPipe } from '../zod-validation.pipe.js';
 
 const PROJECT_ACTION = 'projectAction';
@@ -23,7 +24,6 @@ export interface BodyCheck {
   schema: z.ZodType;
   fallback: ErrorCode;
 }
-const uuid = z.uuid();
 
 /**
  * Exige l'accès au Projet `:projectId` (ou, à défaut, `projectId` du corps de
@@ -64,7 +64,7 @@ export class ProjectAccessGuard implements CanActivate {
     // toute question d'affectation (contrat d'API, #11).
     if (!can({ isAdmin: user.isAdmin, isAssigned: true }, action)) throw accessDenied();
     if (bodyCheck) new ZodValidationPipe(bodyCheck.schema, bodyCheck.fallback).transform(request.body);
-    if (!uuid.safeParse(projectId).success) throw projectNotFound();
+    assertUuid(projectId, projectNotFound);
 
     const isAssigned = await this.database.asUser(user, async (tx) => {
       const { rows } = await sql<{ assigned: boolean }>`

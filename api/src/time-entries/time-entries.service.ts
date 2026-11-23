@@ -17,18 +17,12 @@ import {
   type TimerStatusDto,
 } from '@app/shared';
 import { sql } from 'kysely';
-import { z } from 'zod';
 import type { AuthenticatedUser } from '../auth/authenticated-user.js';
 import { DatabaseService, type Tx } from '../db/database.service.js';
-import {
-  activityNotFound,
-  endBeforeStart,
-  noActiveTimer,
-  projectNotFound,
-  timeEntryNotFound,
-} from '../errors.js';
-
-const uuid = z.uuid();
+import { assertProjectExists } from '../db/queries.js';
+import { activityNotFound, endBeforeStart, noActiveTimer, timeEntryNotFound } from '../errors.js';
+import { assertUuid } from '../identifiers.js';
+import { selectTimeEntries, type TimeEntryRow, toEntryFields } from '../db/time-entry-rows.js';
 
 /**
  * Imputations et Chronomètre de l'Utilisateur courant. Chacun ne lit, démarre
@@ -43,7 +37,7 @@ export class TimeEntriesService {
   /** Le Chronomètre en cours, retrouvé après rechargement ou depuis un autre poste. */
   timer(user: AuthenticatedUser): Promise<TimerStatusDto> {
     return this.database.asUser(user, async (tx) => {
-      const row = await selectEntries(tx)
+      const row = await selectTimeEntries(tx)
         .where('e.user_id', '=', user.id)
         .where('e.ended_at', 'is', null)
         .executeTakeFirst();
@@ -61,8 +55,7 @@ export class TimeEntriesService {
       // Deux démarrages simultanés du même Utilisateur s'exécutent l'un après l'autre.
       await sql`SELECT pg_advisory_xact_lock(hashtext(${`timer:${user.id}`}))`.execute(tx);
 
-      const project = await tx.selectFrom('project').select('id').where('id', '=', input.projectId).executeTakeFirst();
-      if (!project) throw projectNotFound();
+      await assertProjectExists(tx, input.projectId);
 
       const activityId =
         input.newActivityName !== undefined
@@ -78,8 +71,8 @@ export class TimeEntriesService {
         .values({ id, user_id: user.id, project_id: input.projectId, activity_id: activityId, started_at: now })
         .execute();
 
-      const timer = await selectEntries(tx).where('e.id', '=', id).executeTakeFirstOrThrow();
-      const previous = stopped ? await selectEntries(tx).where('e.id', '=', stopped.id).executeTakeFirstOrThrow() : null;
+      const timer = await selectTimeEntries(tx).where('e.id', '=', id).executeTakeFirstOrThrow();
+      const previous = stopped ? await selectTimeEntries(tx).where('e.id', '=', stopped.id).executeTakeFirstOrThrow() : null;
       return { timer: toDto(timer), previousTimerStopped: previous ? toDto(previous) : null };
     });
   }
@@ -89,7 +82,7 @@ export class TimeEntriesService {
     return this.database.asUser(user, async (tx) => {
       const stopped = await stopRunningTimer(tx, user.id, new Date());
       if (!stopped) throw noActiveTimer();
-      return toDto(await selectEntries(tx).where('e.id', '=', stopped.id).executeTakeFirstOrThrow());
+      return toDto(await selectTimeEntries(tx).where('e.id', '=', stopped.id).executeTakeFirstOrThrow());
     });
   }
 
@@ -101,8 +94,7 @@ export class TimeEntriesService {
    */
   addManual(user: AuthenticatedUser, input: ManualEntryInput): Promise<TimeEntryDto> {
     return this.database.asUser(user, async (tx) => {
-      const project = await tx.selectFrom('project').select('id').where('id', '=', input.projectId).executeTakeFirst();
-      if (!project) throw projectNotFound();
+      await assertProjectExists(tx, input.projectId);
       const activityId = await findActivity(tx, input.projectId, input.activityId);
 
       const id = randomUUID();
@@ -117,7 +109,7 @@ export class TimeEntriesService {
           ended_at: new Date(input.endedAt),
         })
         .execute();
-      return toDto(await selectEntries(tx).where('e.id', '=', id).executeTakeFirstOrThrow());
+      return toDto(await selectTimeEntries(tx).where('e.id', '=', id).executeTakeFirstOrThrow());
     });
   }
 
@@ -129,7 +121,7 @@ export class TimeEntriesService {
   today(user: AuthenticatedUser): Promise<TimeEntryDto[]> {
     const { start, end } = dayBounds(currentDay());
     return this.database.asUser(user, async (tx) => {
-      const rows = await selectEntries(tx)
+      const rows = await selectTimeEntries(tx)
         .where('e.user_id', '=', user.id)
         .where('e.started_at', '>=', start)
         .where('e.started_at', '<=', end)
@@ -149,7 +141,7 @@ export class TimeEntriesService {
   history(user: AuthenticatedUser, before: string | undefined): Promise<HistoryPageDto> {
     const { end } = dayBounds(historyStartDay(before, currentDay()));
     return this.database.asUser(user, async (tx) => {
-      const rows = await selectEntries(tx)
+      const rows = await selectTimeEntries(tx)
         .where('e.user_id', '=', user.id)
         .where('e.ended_at', 'is not', null)
         .where('e.started_at', '<=', end)
@@ -166,8 +158,8 @@ export class TimeEntriesService {
    * ferait franchir minuit déclenche la Scission (ADR-0013) : l'original tronqué
    * et la nouvelle Imputation sont écrits dans la même transaction.
    */
-  edit(user: AuthenticatedUser, id: string, input: InlineEditInput): Promise<EditedTimeEntryDto> {
-    if (!uuid.safeParse(id).success) return Promise.reject(timeEntryNotFound());
+  async edit(user: AuthenticatedUser, id: string, input: InlineEditInput): Promise<EditedTimeEntryDto> {
+    assertUuid(id, timeEntryNotFound);
     return this.database.asUser(user, async (tx) => {
       const current = await tx
         .selectFrom('time_entry')
@@ -193,7 +185,7 @@ export class TimeEntriesService {
           .set({ started_at: plan.entry.startedAt, ended_at: plan.entry.endedAt })
           .where('id', '=', id)
           .execute();
-        return { entry: toDto(await selectEntries(tx).where('e.id', '=', id).executeTakeFirstOrThrow()), split: null };
+        return { entry: toDto(await selectTimeEntries(tx).where('e.id', '=', id).executeTakeFirstOrThrow()), split: null };
       }
 
       // La création passe par la base, qui n'accepte qu'une Scission à minuit (migration 0002).
@@ -201,8 +193,8 @@ export class TimeEntriesService {
       await sql`SELECT split_time_entry(${id}::uuid, ${plan.original.startedAt}, ${plan.original.endedAt},
         ${splitId}::uuid, ${plan.created.startedAt}, ${plan.created.endedAt})`.execute(tx);
       const [entry, split] = await Promise.all([
-        selectEntries(tx).where('e.id', '=', id).executeTakeFirstOrThrow(),
-        selectEntries(tx).where('e.id', '=', splitId).executeTakeFirstOrThrow(),
+        selectTimeEntries(tx).where('e.id', '=', id).executeTakeFirstOrThrow(),
+        selectTimeEntries(tx).where('e.id', '=', splitId).executeTakeFirstOrThrow(),
       ]);
       return { entry: toDto(entry), split: toDto(split) };
     });
@@ -213,8 +205,8 @@ export class TimeEntriesService {
    * soit son affectation ; l'Administrateur toutes. Celle d'un autre
    * Utilisateur, invisible en base, répond 404 `IMPUTATION_INTROUVABLE`.
    */
-  remove(user: AuthenticatedUser, id: string): Promise<void> {
-    if (!uuid.safeParse(id).success) return Promise.reject(timeEntryNotFound());
+  async remove(user: AuthenticatedUser, id: string): Promise<void> {
+    assertUuid(id, timeEntryNotFound);
     return this.database.asUser(user, async (tx) => {
       const result = await tx.deleteFrom('time_entry').where('id', '=', id).executeTakeFirst();
       if (result.numDeletedRows === 0n) throw timeEntryNotFound();
@@ -234,11 +226,11 @@ function stopRunningTimer(tx: Tx, userId: string, at: Date): Promise<{ id: strin
 }
 
 async function findActivity(tx: Tx, projectId: string, activityId: string | undefined): Promise<string> {
-  if (!uuid.safeParse(activityId).success) throw activityNotFound();
+  assertUuid(activityId, activityNotFound);
   const row = await tx
     .selectFrom('activity')
     .select('id')
-    .where('id', '=', activityId!)
+    .where('id', '=', activityId)
     .where('project_id', '=', projectId)
     .executeTakeFirst();
   if (!row) throw activityNotFound();
@@ -268,43 +260,6 @@ async function findOrCreateActivity(tx: Tx, projectId: string, name: string): Pr
   return existing.id;
 }
 
-function selectEntries(tx: Tx) {
-  return tx
-    .selectFrom('time_entry as e')
-    .innerJoin('project as p', 'p.id', 'e.project_id')
-    .innerJoin('activity as a', 'a.id', 'e.activity_id')
-    .select([
-      'e.id',
-      'e.user_id',
-      'e.project_id',
-      'p.name as project_name',
-      'e.activity_id',
-      'a.name as activity_name',
-      'e.started_at',
-      'e.ended_at',
-    ]);
-}
-
-interface EntryRow {
-  id: string;
-  user_id: string;
-  project_id: string;
-  project_name: string;
-  activity_id: string;
-  activity_name: string;
-  started_at: Date;
-  ended_at: Date | null;
-}
-
-function toDto(row: EntryRow): TimeEntryDto {
-  return {
-    id: row.id,
-    userId: row.user_id,
-    projectId: row.project_id,
-    projectName: row.project_name,
-    activityId: row.activity_id,
-    activityName: row.activity_name,
-    startedAt: row.started_at.toISOString(),
-    endedAt: row.ended_at ? row.ended_at.toISOString() : null,
-  };
+function toDto(row: TimeEntryRow & { id: string; user_id: string }): TimeEntryDto {
+  return { id: row.id, userId: row.user_id, ...toEntryFields(row) };
 }

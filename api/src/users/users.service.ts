@@ -4,6 +4,7 @@ import { sql } from 'kysely';
 import { type Account, AccountDirectory } from '../accounts/account-directory.service.js';
 import type { AuthenticatedUser } from '../auth/authenticated-user.js';
 import { DatabaseService, type Tx } from '../db/database.service.js';
+import { countTimeEntries, isProjectMember } from '../db/queries.js';
 import { accountActionRefused, emailTaken, isUniqueViolation, loginTaken, userNotFound } from '../errors.js';
 
 const UNIQUE_LOGIN_INDEX = 'app_user_login_key';
@@ -110,12 +111,7 @@ export class UsersService {
     return this.database.asUser(user, async (tx) => {
       const row = await tx.selectFrom('app_user').select('id').where('id', '=', userId).executeTakeFirst();
       if (!row) throw userNotFound();
-      const { timeEntries } = await tx
-        .selectFrom('time_entry')
-        .select((eb) => eb.fn.countAll<string>().as('timeEntries'))
-        .where('user_id', '=', userId)
-        .executeTakeFirstOrThrow();
-      return { timeEntries: Number(timeEntries) };
+      return { timeEntries: await countTimeEntries(tx, 'user_id', userId) };
     });
   }
 
@@ -143,16 +139,7 @@ export class UsersService {
         .set({ ended_at: revokedAt })
         .where('e.user_id', '=', userId)
         .where('e.ended_at', 'is', null)
-        .where(({ not, exists, selectFrom }) =>
-          not(
-            exists(
-              selectFrom('project_member as m')
-                .select('m.user_id')
-                .whereRef('m.project_id', '=', 'e.project_id')
-                .whereRef('m.user_id', '=', 'e.user_id'),
-            ),
-          ),
-        )
+        .where(({ not, ref }) => not(isProjectMember(ref('e.project_id'), ref('e.user_id'))))
         .execute();
       await this.accounts.revokeAdministrator(userId);
     });

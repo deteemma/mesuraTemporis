@@ -24,7 +24,7 @@ export const createProjectSchema = z.object({
 });
 export type CreateProjectInput = z.infer<typeof createProjectSchema>;
 
-/** Projet tel que renvoyé par l'API (badge « actif » repris à l'identique). */
+/** Projet tel que renvoyé par l'API ; `status` vaut `'active'`, affiché « actif » (badge repris de la source). */
 export interface ProjectSummaryDto {
   id: string;
   name: string;

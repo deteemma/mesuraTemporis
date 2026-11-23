@@ -4,6 +4,7 @@ import type { CreateProjectInput, ProjectImpactDto, ProjectSummaryDto, UserSumma
 import { AccountDirectory } from '../accounts/account-directory.service.js';
 import type { AuthenticatedUser } from '../auth/authenticated-user.js';
 import { DatabaseService, type Tx } from '../db/database.service.js';
+import { assertProjectExists, countTimeEntries, isProjectMember } from '../db/queries.js';
 import { projectNotFound, userNotFound } from '../errors.js';
 
 /**
@@ -27,15 +28,7 @@ export class ProjectsService {
     return this.database.asUser(user, async (tx) => {
       let query = this.selectProjects(tx);
       if (!user.isAdmin) {
-        query = query.where((eb) =>
-          eb.exists(
-            eb
-              .selectFrom('project_member as m')
-              .select('m.project_id')
-              .whereRef('m.project_id', '=', 'p.id')
-              .where('m.user_id', '=', user.id),
-          ),
-        );
+        query = query.where((eb) => isProjectMember(eb.ref('p.id'), user.id));
       }
       const rows = await query.orderBy('p.created_at', 'desc').execute();
       return rows.map(toDto);
@@ -74,25 +67,20 @@ export class ProjectsService {
   /** Ce que détruirait la suppression du Projet, pour le dialogue chiffré. */
   impact(user: AuthenticatedUser, projectId: string): Promise<ProjectImpactDto> {
     return this.database.asUser(user, async (tx) => {
-      await this.assertProjectExists(tx, projectId);
+      await assertProjectExists(tx, projectId);
       const { activities } = await tx
         .selectFrom('activity')
         .select((eb) => eb.fn.countAll<string>().as('activities'))
         .where('project_id', '=', projectId)
         .executeTakeFirstOrThrow();
-      const { timeEntries } = await tx
-        .selectFrom('time_entry')
-        .select((eb) => eb.fn.countAll<string>().as('timeEntries'))
-        .where('project_id', '=', projectId)
-        .executeTakeFirstOrThrow();
-      return { activities: Number(activities), timeEntries: Number(timeEntries) };
+      return { activities: Number(activities), timeEntries: await countTimeEntries(tx, 'project_id', projectId) };
     });
   }
 
   /** Les Affectés du Projet, dans l'ordre de leur affectation. */
   members(user: AuthenticatedUser, projectId: string): Promise<UserSummaryDto[]> {
     return this.database.asUser(user, async (tx) => {
-      await this.assertProjectExists(tx, projectId);
+      await assertProjectExists(tx, projectId);
       return tx
         .selectFrom('project_member as m')
         .innerJoin('app_user as u', 'u.id', 'm.user_id')
@@ -107,7 +95,7 @@ export class ProjectsService {
   /** Affecter un Utilisateur déjà affecté est sans effet (#11). */
   assign(user: AuthenticatedUser, projectId: string, userId: string): Promise<void> {
     return this.database.asUser(user, async (tx) => {
-      await this.assertProjectExists(tx, projectId);
+      await assertProjectExists(tx, projectId);
       await this.assertUserExists(tx, userId);
       await tx
         .insertInto('project_member')
@@ -127,7 +115,7 @@ export class ProjectsService {
   unassign(user: AuthenticatedUser, projectId: string, userId: string): Promise<void> {
     return this.database.asUser(user, async (tx) => {
       const removedAt = new Date();
-      await this.assertProjectExists(tx, projectId);
+      await assertProjectExists(tx, projectId);
       await this.assertUserExists(tx, userId);
       const removed = await tx
         .deleteFrom('project_member')
@@ -157,11 +145,6 @@ export class ProjectsService {
 
   private selectProjects(tx: Tx) {
     return tx.selectFrom('project as p').select(['p.id', 'p.name', 'p.status', 'p.created_at']);
-  }
-
-  private async assertProjectExists(tx: Tx, projectId: string): Promise<void> {
-    const row = await tx.selectFrom('project').select('id').where('id', '=', projectId).executeTakeFirst();
-    if (!row) throw projectNotFound();
   }
 
   private async assertUserExists(tx: Tx, userId: string): Promise<void> {
