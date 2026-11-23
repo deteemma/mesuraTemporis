@@ -35,7 +35,7 @@ les identifiants de code en anglais.
 | Équipe | `project_member` | Ensemble des Utilisateurs affectés à un Projet. | Membres |
 | Affecté | `contributor` | Utilisateur faisant partie de l'équipe d'un Projet : il peut y saisir du temps, y créer et y renommer des Activités. Seul rôle de Projet attribué. | Membre, contributeur (dans l'interface) |
 | Activité | `activity` | Item de travail propre à un Projet, auquel le temps est réellement imputé. Son nom est unique dans le Projet, sans tenir compte de la casse ni des accents. | Tâche |
-| Imputation | `time_entry` | Plage de temps (début, fin) d'un Utilisateur sur une Activité d'un Projet. Plusieurs Imputations peuvent se chevaucher. | Saisie de temps, entrée de temps |
+| Imputation | `time_entry` | Plage de temps (début, fin) d'un Utilisateur sur une Activité d'un Projet. Plusieurs Imputations peuvent se chevaucher. | entrée de temps |
 | Auteur | `user_id` (de l'Imputation) | Utilisateur à qui appartient une Imputation. | Propriétaire (réservé au rôle de Projet) |
 | Chronomètre | — | Imputation en cours, sans heure de fin. Un Utilisateur n'en a qu'un à la fois ; en démarrer un arrête celui en cours. | Timer, chrono actif |
 | Saisie manuelle | — | Création d'une Imputation terminée en indiquant son début et sa fin. | Ajout manuel |
