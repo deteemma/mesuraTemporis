@@ -4,9 +4,20 @@
 // chiffré, refus en notification, ligne sur deux niveaux. Les actions refusées
 // (sur soi-même) restent visibles : le serveur les refuse, en
 // notification. Il pilote l'Annuaire des comptes par l'API (ADR-0018).
-// Réservé à l'Administrateur : voir App.tsx.
-import type { UserDto, UserImpactDto, UserListDto } from '@app/shared';
+// Réservé à l'Administrateur : voir App.tsx. Il présente aussi les Demandes
+// d'accès, en attente puis refusées, et la décision de l'Administrateur
+// (ADR-0028, #32).
+import {
+  type AccessRequestDto,
+  dayOf,
+  type DecisionDto,
+  formatDateInput,
+  type UserDto,
+  type UserImpactDto,
+  type UserListDto,
+} from '@app/shared';
 import { type FormEvent, useCallback, useEffect, useState } from 'react';
+import { reloadAccessRequests, useAccessRequests } from '../accessRequests';
 import { request } from '../api';
 import { DeleteButton } from '../DeleteButton';
 import { useLanguage } from '../i18n/i18n';
@@ -91,6 +102,8 @@ export function UsersPage() {
         </form>
       </section>
 
+      <AccessRequestsSections onUsersChanged={reload} />
+
       {list?.users.length === 0 && <p className="resource-list__vide">{t('UTILISATEURS_AUCUN')}</p>}
 
       {list !== null && list.users.length > 0 && (
@@ -151,6 +164,9 @@ function UserRow({ user, onChanged }: { user: UserDto; onChanged: () => void }) 
         <span className="resource-list__nom">{user.login}</span>
         {user.name && <span className="resource-list__meta">{user.name}</span>}
         <span className="resource-list__meta">{user.email || '—'}</span>
+        {user.acceptance && (
+          <span className="resource-list__meta">{t('UTILISATEURS_ACCEPTE_PAR', decisionParams(user.acceptance))}</span>
+        )}
       </div>
 
       <span className={`badge${user.isAdmin ? ' badge--admin' : ''}`}>
@@ -173,6 +189,123 @@ function UserRow({ user, onChanged }: { user: UserDto; onChanged: () => void }) 
           {t(user.isAdmin ? 'BOUTON_RETIRER_ROLE_ADMINISTRATEUR' : 'BOUTON_RENDRE_ADMINISTRATEUR')}
         </button>
         <DeleteButton describe={describeDeletion} onConfirm={() => void remove()} />
+      </div>
+    </li>
+  );
+}
+
+/** Auteur et date d'une décision, pour les libellés « … par {nom} le {date} ». */
+function decisionParams(decision: DecisionDto): Record<string, string> {
+  return { nom: decision.by, date: formatDay(decision.at) };
+}
+
+function formatDay(instant: string): string {
+  return formatDateInput(dayOf(instant));
+}
+
+const PROVIDER_NAMES: Record<string, string> = { google: 'Google', microsoft: 'Microsoft' };
+
+/**
+ * Demandes d'accès en attente, puis refusées à part ; chaque section n'apparaît
+ * que si elle a des demandes. Une acceptation fait apparaître l'Utilisateur
+ * dans la liste.
+ */
+function AccessRequestsSections({ onUsersChanged }: { onUsersChanged: () => void }) {
+  const { t } = useLanguage();
+  const notifyError = useNotifyError();
+  const requests = useAccessRequests();
+
+  useEffect(() => {
+    reloadAccessRequests().catch(notifyError);
+  }, [notifyError]);
+
+  const decide = useCallback(
+    async (path: string, method: 'POST' | 'DELETE', usersChanged: boolean) => {
+      try {
+        await request<void>(path, { method });
+      } catch (error) {
+        notifyError(error);
+      }
+      if (usersChanged) onUsersChanged();
+      reloadAccessRequests().catch(notifyError);
+    },
+    [notifyError, onUsersChanged],
+  );
+
+  if (requests === null) return null;
+  return (
+    <>
+      {requests.pending.length > 0 && (
+        <section className="card">
+          <h2>{t('DEMANDES_TITRE_ATTENTE')}</h2>
+          <ul className="resource-list">
+            {requests.pending.map((accessRequest) => (
+              <AccessRequestRow key={accessRequest.id} accessRequest={accessRequest} decide={decide} />
+            ))}
+          </ul>
+        </section>
+      )}
+      {requests.refused.length > 0 && (
+        <section className="card">
+          <h2>{t('DEMANDES_TITRE_REFUSEES')}</h2>
+          <ul className="resource-list">
+            {requests.refused.map((accessRequest) => (
+              <AccessRequestRow key={accessRequest.id} accessRequest={accessRequest} decide={decide} />
+            ))}
+          </ul>
+        </section>
+      )}
+    </>
+  );
+}
+
+/**
+ * Une Demande d'accès : Email, Nom, fournisseur et date. En attente :
+ * Accepter ou Refuser ; refusée : l'auteur et la date du refus, Accepter ou
+ * Supprimer (ce qui libère l'Email).
+ */
+function AccessRequestRow({
+  accessRequest,
+  decide,
+}: {
+  accessRequest: AccessRequestDto;
+  decide: (path: string, method: 'POST' | 'DELETE', usersChanged: boolean) => Promise<void>;
+}) {
+  const { t } = useLanguage();
+  const base = `/access-requests/${encodeURIComponent(accessRequest.id)}`;
+  const label = accessRequest.email || accessRequest.name || accessRequest.id;
+
+  return (
+    <li className="resource-list__item user-row">
+      <div className="user-row__identity">
+        <span className="resource-list__nom">{accessRequest.email || '—'}</span>
+        {accessRequest.name && <span className="resource-list__meta">{accessRequest.name}</span>}
+        <span className="resource-list__meta">
+          {PROVIDER_NAMES[accessRequest.provider] ?? accessRequest.provider} ·{' '}
+          {t('DEMANDES_RECUE_LE', { date: formatDay(accessRequest.createdAt) })}
+        </span>
+        {accessRequest.refusal && (
+          <span className="resource-list__meta">{t('DEMANDES_REFUSEE_PAR', decisionParams(accessRequest.refusal))}</span>
+        )}
+        {accessRequest.provider === 'microsoft' && (
+          <span className="access-request__warning">{t('DEMANDES_AVERTISSEMENT_MICROSOFT')}</span>
+        )}
+      </div>
+
+      <div className="resource-list__actions">
+        <button type="button" className="btn btn-primary" onClick={() => void decide(`${base}/accept`, 'POST', true)}>
+          {t('BOUTON_ACCEPTER')}
+        </button>
+        {accessRequest.refusal ? (
+          <DeleteButton
+            describe={() => Promise.resolve(t('CONFIRMER_DEMANDE', { email: label }))}
+            onConfirm={() => void decide(base, 'DELETE', false)}
+          />
+        ) : (
+          <button type="button" className="btn btn-secondary" onClick={() => void decide(`${base}/refuse`, 'POST', false)}>
+            {t('BOUTON_REFUSER')}
+          </button>
+        )}
       </div>
     </li>
   );

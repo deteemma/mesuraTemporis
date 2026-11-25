@@ -16,13 +16,13 @@ initAuth()
   .then(async (user) => {
     // Visiteur non connecté : directement vers la connexion Keycloak.
     if (!user) return login();
-    // Demande d'accès en attente (ADR-0028) : la page d'attente seule.
+    // Demande d'accès en attente ou refusée (ADR-0028) : la page de son état seule.
     const admission = await request<AdmissionDto>('/admission');
     root.render(
       <StrictMode>
         <LanguageProvider>
-          {admission.status === 'pending' ? (
-            <WaitingPage email={admission.email} />
+          {admission.status !== 'admitted' ? (
+            <WaitingPage status={admission.status} email={admission.email} />
           ) : (
             <NotificationsProvider>
               <App user={user} />

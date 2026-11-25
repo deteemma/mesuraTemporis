@@ -1,6 +1,6 @@
 // Types Kysely des tables (voir api/migrations). À tenir à jour avec les migrations.
 import type { ColumnType, Generated } from 'kysely';
-import type { ProjectRole } from '@app/shared';
+import type { AccessRequestStatus, ProjectRole } from '@app/shared';
 
 type Timestamp = ColumnType<Date, Date | string | undefined, Date | string>;
 
@@ -9,6 +9,10 @@ export interface AppUserTable {
   login: string;
   email: string | null;
   display_name: string | null;
+  /** Acceptation de la Demande d'accès dont l'Utilisateur est né (ADR-0028). */
+  accepted_by: ColumnType<string | null, string | null | undefined, never>;
+  accepted_by_name: ColumnType<string | null, string | null | undefined, never>;
+  accepted_at: ColumnType<Date | null, Date | string | null | undefined, never>;
   created_at: Timestamp;
   updated_at: Timestamp;
 }
@@ -52,8 +56,12 @@ export interface AccessRequestTable {
   email: string | null;
   display_name: string | null;
   provider: string;
-  status: Generated<'pending'>;
+  status: Generated<AccessRequestStatus>;
   created_at: Generated<Date>;
+  /** Refus : l'Administrateur (identifiant, et Nom ou Login au moment du refus) et sa date. */
+  decided_by: string | null;
+  decided_by_name: string | null;
+  decided_at: ColumnType<Date | null, Date | string | null | undefined, Date | string | null>;
 }
 
 export interface Database {

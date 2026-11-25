@@ -40,11 +40,12 @@ export class AccountDirectory {
 
   /**
    * Fournisseurs d'identité (alias Keycloak : google, microsoft) liés au
-   * compte, vide pour un compte à mot de passe. Un compte absent n'en a aucun.
+   * compte, vide pour un compte à mot de passe ; `null` si le compte est absent
+   * (supprimé alors que son jeton reste valide).
    */
-  async identityProviders(userId: string): Promise<string[]> {
+  async identityProviders(userId: string): Promise<string[] | null> {
     const response = await this.get(`${userPath(userId)}/federated-identity`);
-    if (response.status === 404) return [];
+    if (response.status === 404) return null;
     await ensureOk(response);
     const links = (await response.json()) as { identityProvider: string }[];
     return links.map((link) => link.identityProvider);

@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, UnauthorizedException } from '@nestjs/common';
 import {
   accountActionRefusal,
   type AdmissionDto,
@@ -12,14 +12,13 @@ import { sql } from 'kysely';
 import { type Account, AccountDirectory } from '../accounts/account-directory.service.js';
 import type { AuthenticatedUser } from '../auth/authenticated-user.js';
 import { DatabaseService, type Tx } from '../db/database.service.js';
-import { countTimeEntries, isProjectMember } from '../db/queries.js';
+import { countTimeEntries, decisionOf, isProjectMember } from '../db/queries.js';
 import { accountActionRefused, emailTaken, isUniqueViolation, loginTaken, userNotFound } from '../errors.js';
 
 const UNIQUE_LOGIN_INDEX = 'app_user_login_key';
 const UNIQUE_EMAIL_INDEX = 'app_user_email_key';
 
 const ADMITTED: AdmissionDto = { status: 'admitted' };
-const pending = (email: string | null): AdmissionDto => ({ status: 'pending', email });
 
 /**
  * Utilisateurs : la ligne app_user en base et le compte de connexion de
@@ -43,9 +42,12 @@ export class UsersService {
    * Admission de la personne du jeton (ADR-0028), et recopie de sa ligne
    * Utilisateur :
    * - Utilisateur connu : sa ligne est remise à jour ; admis ;
-   * - Demande d'accès déjà enregistrée : en attente ;
+   * - Demande d'accès déjà enregistrée : en attente, ou refusée ;
    * - compte inconnu : selon `arrivalOf`, Demande d'accès en attente (arrivée
-   *   par Google ou Microsoft) ou ligne Utilisateur créée (admis).
+   *   par Google ou Microsoft) ou ligne Utilisateur créée (admis) ;
+   * - compte absent de l'Annuaire (supprimé, jeton encore valide) : 401, jamais
+   *   admis. Sans cela, la personne dont la demande refusée vient d'être
+   *   supprimée deviendrait Utilisateur.
    */
   async admit(user: AuthenticatedUser, token: string): Promise<AdmissionDto> {
     const known = this.lastToken.get(user.id);
@@ -62,12 +64,14 @@ export class UsersService {
 
       const request = await tx
         .selectFrom('access_request')
-        .select('email')
+        .select(['email', 'status'])
         .where('account_id', '=', user.id)
         .executeTakeFirst();
-      if (request) return pending(request.email);
+      if (request) return { status: request.status, email: request.email };
 
-      const arrival = arrivalOf(await this.accounts.identityProviders(user.id));
+      const providers = await this.accounts.identityProviders(user.id);
+      if (providers === null) throw new UnauthorizedException();
+      const arrival = arrivalOf(providers);
       if (arrival.kind === 'access-request') {
         // Requêtes simultanées du même premier jeton : une seule demande.
         await tx
@@ -75,7 +79,7 @@ export class UsersService {
           .values({ account_id: user.id, email: user.email, display_name: user.displayName, provider: arrival.provider })
           .onConflict((oc) => oc.column('account_id').doNothing())
           .execute();
-        return pending(user.email);
+        return { status: 'pending' as const, email: user.email };
       }
       await tx
         .insertInto('app_user')
@@ -89,6 +93,14 @@ export class UsersService {
   }
 
   /**
+   * Oublie l'admission retenue pour le compte : après une décision sur sa
+   * Demande d'accès, sa requête suivante la relit en base.
+   */
+  forgetAdmission(accountId: string): void {
+    this.lastToken.delete(accountId);
+  }
+
+  /**
    * Tous les Utilisateurs par Login, avec leur rôle lu dans l'Annuaire, et le
    * nombre de ceux qui n'ont aucune affectation (badge « sans Projet »). Sert
    * aussi la liste « Affecter » de l'écran Projets.
@@ -98,7 +110,7 @@ export class UsersService {
       this.database.asUser(user, (tx) =>
         tx
           .selectFrom('app_user as u')
-          .select(['u.id', 'u.login', 'u.email', 'u.display_name'])
+          .select(['u.id', 'u.login', 'u.email', 'u.display_name', 'u.accepted_by_name', 'u.accepted_at'])
           .select((eb) =>
             eb
               .exists(eb.selectFrom('project_member as m').select('m.user_id').whereRef('m.user_id', '=', 'u.id'))
@@ -142,7 +154,7 @@ export class UsersService {
       await this.accounts.deleteAccount(account.id);
       throw translateUniqueViolation(error);
     }
-    return toDto(fromAccount(account), input.isAdmin);
+    return toDto({ ...fromAccount(account), accepted_by_name: null, accepted_at: null }, input.isAdmin);
   }
 
   /**
@@ -247,12 +259,15 @@ interface UserRow {
   login: string;
   email: string | null;
   display_name: string | null;
+  accepted_by_name: string | null;
+  accepted_at: Date | null;
 }
 
-function fromAccount(account: Account): UserRow {
+function fromAccount(account: Account): Omit<UserRow, 'accepted_by_name' | 'accepted_at'> {
   return { id: account.id, login: account.login, email: account.email, display_name: account.name };
 }
 
 function toDto(row: UserRow, isAdmin: boolean): UserDto {
-  return { id: row.id, login: row.login, name: row.display_name, email: row.email, isAdmin };
+  const acceptance = decisionOf(row.accepted_by_name, row.accepted_at);
+  return { id: row.id, login: row.login, name: row.display_name, email: row.email, isAdmin, acceptance };
 }

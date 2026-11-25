@@ -1,10 +1,12 @@
 // Coquille de l'application, reprise de la source : menu latéral (barre basse
 // sur téléphone), sélecteur de langue et déconnexion.
 import type { User } from 'oidc-client-ts';
-import type { ReactNode } from 'react';
+import { type ReactNode, useEffect } from 'react';
+import { reloadAccessRequests, useAccessRequests } from './accessRequests';
 import { isAdministrator, logout } from './auth';
 import { BrandLogo } from './BrandLogo';
 import { useLanguage } from './i18n/i18n';
+import { useNotifyError } from './notifications';
 import { LanguageSwitcher } from './LanguageSwitcher';
 import { ACTIVITIES_PATH, ActivitiesPage } from './pages/ActivitiesPage';
 import { MyProjectsPage } from './pages/MyProjectsPage';
@@ -60,13 +62,14 @@ interface Screen {
 }
 
 export const HOME_PATH = '/saisie-temps';
+const USERS_PATH = '/utilisateurs';
 
 const SCREENS: Screen[] = [
   { path: HOME_PATH, label: 'NAV_SAISIE_TEMPS', shortLabel: 'NAV_TEMPS_COURT', icon: ICONS.time, adminOnly: false, page: TimeEntryPage },
   { path: '/rapport', label: 'NAV_RAPPORT', shortLabel: 'NAV_RAPPORT', icon: ICONS.report, adminOnly: false, page: ReportPage },
   { path: '/mes-projets', label: 'NAV_MES_PROJETS', shortLabel: 'NAV_MES_PROJETS', icon: ICONS.myProjects, adminOnly: false, page: MyProjectsPage },
   { path: '/projets', label: 'NAV_PROJETS', shortLabel: 'NAV_PROJETS', icon: ICONS.projects, adminOnly: true, page: ProjectsPage },
-  { path: '/utilisateurs', label: 'NAV_UTILISATEURS', shortLabel: 'NAV_UTILISATEURS', icon: ICONS.users, adminOnly: true, page: UsersPage },
+  { path: USERS_PATH, label: 'NAV_UTILISATEURS', shortLabel: 'NAV_UTILISATEURS', icon: ICONS.users, adminOnly: true, page: UsersPage },
 ];
 
 export function App({ user }: { user: User }) {
@@ -78,6 +81,12 @@ export function App({ user }: { user: User }) {
   const screen = screens.find((s) => s.path === path);
   // Activités du Projet : ouvert depuis l'écran Projets, hors menu, réservé à l'Administrateur.
   const activitiesProjectId = admin ? ACTIVITIES_PATH.exec(path)?.[1] : undefined;
+  const notifyError = useNotifyError();
+  // Compteur des Demandes d'accès : lu à l'ouverture, puis à chaque décision de l'écran Utilisateurs.
+  useEffect(() => {
+    if (admin) reloadAccessRequests().catch(notifyError);
+  }, [admin, notifyError]);
+  const counter = (s: Screen) => (admin && s.path === USERS_PATH ? <PendingRequestsCounter /> : null);
 
   return (
     <div className="shell">
@@ -88,6 +97,7 @@ export function App({ user }: { user: User }) {
             <Link key={s.path} to={s.path} className="sidenav__link">
               <Icon size={18}>{s.icon}</Icon>
               <span>{t(s.label)}</span>
+              {counter(s)}
             </Link>
           ))}
         </div>
@@ -113,10 +123,28 @@ export function App({ user }: { user: User }) {
           <Link key={s.path} to={s.path} className="bottomnav__link">
             <Icon size={20}>{s.icon}</Icon>
             <span>{t(s.shortLabel)}</span>
+            {counter(s)}
           </Link>
         ))}
         <LanguageSwitcher className="bottomnav__langue" openUpwards />
       </nav>
     </div>
+  );
+}
+
+/**
+ * Compteur des Demandes d'accès en attente (ADR-0028), sur le lien
+ * « Utilisateurs » de l'Administrateur ; rien quand il n'y en a pas.
+ */
+function PendingRequestsCounter() {
+  const { t } = useLanguage();
+  const requests = useAccessRequests();
+
+  const count = requests?.pending.length ?? 0;
+  if (count === 0) return null;
+  return (
+    <span className="nav-counter" aria-label={t('DEMANDES_COMPTEUR_ARIA', { nombre: String(count) })}>
+      {count}
+    </span>
   );
 }

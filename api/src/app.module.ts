@@ -16,6 +16,8 @@ import { ReportsController } from './reports/reports.controller.js';
 import { ReportsService } from './reports/reports.service.js';
 import { TimeEntriesController } from './time-entries/time-entries.controller.js';
 import { TimeEntriesService } from './time-entries/time-entries.service.js';
+import { AccessRequestsController } from './users/access-requests.controller.js';
+import { AccessRequestsService } from './users/access-requests.service.js';
 import { AdmissionController } from './users/admission.controller.js';
 import { UsersController } from './users/users.controller.js';
 import { UsersService } from './users/users.service.js';
@@ -30,6 +32,7 @@ import { UsersService } from './users/users.service.js';
     ReportsController,
     UsersController,
     AdmissionController,
+    AccessRequestsController,
   ],
   providers: [
     { provide: AppConfig, useFactory: () => new AppConfig() },
@@ -37,6 +40,7 @@ import { UsersService } from './users/users.service.js';
     AccountDirectory,
     OidcVerifier,
     UsersService,
+    AccessRequestsService,
     ProjectsService,
     ActivitiesService,
     TimeEntriesService,

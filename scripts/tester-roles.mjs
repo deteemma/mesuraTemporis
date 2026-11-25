@@ -1403,7 +1403,7 @@ await check('alice (non Administrateur) : 403 ACCES_REFUSE sur la liste, la cré
 });
 await check('diane liste les Utilisateurs par Login : Login, Nom, Email et rôle lu dans l’Annuaire', async () => {
   const { users } = await usersList();
-  assert.deepEqual(users.find((u) => u.login === 'alice'), { id: alice.sub, login: 'alice', name: 'Alice', email: 'alice@exemple.test', isAdmin: false });
+  assert.deepEqual(users.find((u) => u.login === 'alice'), { id: alice.sub, login: 'alice', name: 'Alice', email: 'alice@exemple.test', isAdmin: false, acceptance: null });
   assert.equal(users.find((u) => u.login === 'diane').isAdmin, true);
   const logins = users.map((u) => u.login);
   assert.deepEqual(logins, [...logins].sort());
@@ -1456,7 +1456,7 @@ await check('diane crée un Utilisateur : compte Keycloak et ligne Utilisateur a
   const r = created(await call(diane, 'POST', '/users', { login: `nouveau-${RUN}`, name: ' Nouveau ', email: `Nouveau-${RUN}@Exemple.test` }));
   assert.equal(r.status, 201, JSON.stringify(r.body));
   newcomer.id = r.body.id;
-  assert.deepEqual(r.body, { id: newcomer.id, login: `nouveau-${RUN}`, name: 'Nouveau', email: `nouveau-${RUN}@exemple.test`, isAdmin: false });
+  assert.deepEqual(r.body, { id: newcomer.id, login: `nouveau-${RUN}`, name: 'Nouveau', email: `nouveau-${RUN}@exemple.test`, isAdmin: false, acceptance: null });
   const row = await query(diane, `SELECT login, email, display_name FROM app_user WHERE id = $1`, [newcomer.id]);
   assert.deepEqual(row.rows, [{ login: `nouveau-${RUN}`, email: `nouveau-${RUN}@exemple.test`, display_name: 'Nouveau' }]);
   const listed = await usersList();
@@ -1860,6 +1860,182 @@ await check('un Utilisateur né de Google supprimé qui se reconnecte crée une 
   assert.equal((await call(back, 'GET', '/projects')).status, 403);
   assert.equal((await requestOf(back.id)).status, 'pending');
   assert.equal(await userRowOf(back.id), 0);
+});
+
+console.log('\nDécision de l’Administrateur sur les Demandes d’accès (ADR-0028, #32)');
+const requestsList = async (user = diane) => call(user, 'GET', '/access-requests');
+const recent = (iso) => Math.abs(new Date(iso).getTime() - Date.now()) < 60_000;
+
+await check('alice (non Administrateur) : 403 ACCES_REFUSE sur la liste, l’acceptation, le refus et la suppression ; la demande est intacte', async () => {
+  const attempts = [
+    ['GET', '/access-requests'],
+    ['POST', `/access-requests/${applicant.id}/accept`],
+    ['POST', `/access-requests/${applicant.id}/refuse`],
+    ['DELETE', `/access-requests/${applicant.id}`],
+  ];
+  for (const [method, path] of attempts) {
+    const r = await call(alice, method, path);
+    assert.equal(r.status, 403, `${method} ${path}`);
+    assert.equal(r.body.code, 'ACCES_REFUSE', `${method} ${path}`);
+  }
+  assert.equal((await requestOf(applicant.id)).status, 'pending');
+  assert.equal(await userRowOf(applicant.id), 0);
+});
+await check('la personne en attente : 403 sur la liste et sur toute décision, y compris la sienne', async () => {
+  for (const [method, path] of [['GET', '/access-requests'], ['POST', `/access-requests/${applicant.id}/accept`]]) {
+    assert.equal((await call(applicant, method, path)).status, 403, `${method} ${path}`);
+  }
+  assert.equal(await userRowOf(applicant.id), 0);
+});
+await check('diane voit les demandes en attente (Email, Nom, fournisseur, date) ; le compteur est leur nombre', async () => {
+  const r = await requestsList();
+  assert.equal(r.status, 200);
+  const mine = r.body.pending.find((request) => request.id === applicant.id);
+  assert.deepEqual({ ...mine, createdAt: undefined }, {
+    id: applicant.id, email: applicant.email, name: 'Nom Google', provider: 'google', createdAt: undefined, refusal: null,
+  });
+  assert.ok(recent(mine.createdAt));
+  const expected = await query(diane, `SELECT count(*)::int AS n FROM access_request WHERE status = 'pending'`);
+  assert.equal(r.body.pending.length, expected.rows[0].n);
+  assert.ok(!r.body.refused.some((request) => request.id === applicant.id));
+});
+await check('demande inconnue : 404 DEMANDE_ACCES_INTROUVABLE pour l’acceptation, le refus et la suppression', async () => {
+  for (const [method, path] of [['POST', '/accept'], ['POST', '/refuse'], ['DELETE', '']]) {
+    const r = await call(diane, method, `/access-requests/inconnue-${RUN}${path}`);
+    assert.equal(r.status, 404, `${method} ${path}`);
+    assert.equal(r.body.code, 'DEMANDE_ACCES_INTROUVABLE');
+  }
+});
+await check('une demande en attente ne se supprime pas : 409 DEMANDE_ACCES_NON_REFUSEE, compte et demande intacts', async () => {
+  const r = await call(diane, 'DELETE', `/access-requests/${applicant.id}`);
+  assert.equal(r.status, 409);
+  assert.equal(r.body.code, 'DEMANDE_ACCES_NON_REFUSEE');
+  assert.equal((await requestOf(applicant.id)).status, 'pending');
+  assert.equal((await keycloak('GET', `/users/${applicant.id}`)).status, 200);
+});
+await check('RLS : alice ne refuse pas une demande ; nul ne remet une demande refusée en attente', async () => {
+  const r = await query(alice, `UPDATE access_request SET status = 'refused', decided_by = $1, decided_by_name = 'Alice', decided_at = now() WHERE account_id = $2`, [alice.sub, applicant.id]);
+  assert.equal(r.rowCount, 0);
+  const own = await query({ sub: applicant.id, isAdmin: false }, `UPDATE access_request SET status = 'refused', decided_by = $1, decided_by_name = 'x', decided_at = now() WHERE account_id = $1`, [applicant.id]);
+  assert.equal(own.rowCount, 0);
+  // Dans une transaction annulée : diane refuse, puis tente de remettre en attente.
+  await assert.rejects(
+    inDb(diane, async (q) => {
+      await q(`UPDATE access_request SET status = 'refused', decided_by = $1, decided_by_name = 'Diane', decided_at = now() WHERE account_id = $2`, [diane.sub, applicant.id]);
+      await q(`UPDATE access_request SET status = 'pending', decided_by = NULL, decided_by_name = NULL, decided_at = NULL WHERE account_id = $1`, [applicant.id]);
+    }),
+    /row-level security/,
+  );
+  assert.equal((await requestOf(applicant.id)).status, 'pending');
+});
+
+await check('diane refuse : la demande passe dans les refusées, avec diane pour auteur et la date', async () => {
+  assert.equal((await call(diane, 'POST', `/access-requests/${applicant.id}/refuse`)).status, 204);
+  const { body } = await requestsList();
+  assert.ok(!body.pending.some((request) => request.id === applicant.id));
+  const refused = body.refused.find((request) => request.id === applicant.id);
+  assert.equal(refused.refusal.by, 'Diane');
+  assert.ok(recent(refused.refusal.at));
+  assert.equal(await userRowOf(applicant.id), 0);
+});
+await check('la personne refusée voit le refus à chaque connexion ; toute autre route lui répond 403', async () => {
+  for (let i = 0; i < 2; i++) {
+    Object.assign(applicant, await login(applicant.email));
+    assert.deepEqual((await call(applicant, 'GET', '/admission')).body, { status: 'refused', email: applicant.email });
+    const r = await call(applicant, 'GET', '/projects');
+    assert.equal(r.status, 403);
+    assert.equal(r.body.code, 'ACCES_REFUSE');
+  }
+  assert.equal(await userRowOf(applicant.id), 0);
+});
+await check('une demande refusée ne se refuse pas une seconde fois : 409 DEMANDE_ACCES_DEJA_REFUSEE, auteur inchangé', async () => {
+  const r = await call(diane, 'POST', `/access-requests/${applicant.id}/refuse`);
+  assert.equal(r.status, 409);
+  assert.equal(r.body.code, 'DEMANDE_ACCES_DEJA_REFUSEE');
+  const row = (await query(diane, `SELECT status, decided_by FROM access_request WHERE account_id = $1`, [applicant.id])).rows[0];
+  assert.deepEqual(row, { status: 'refused', decided_by: diane.sub });
+});
+await check('une demande refusée garde son Email réservé : création d’Utilisateur → 409 EMAIL_EXISTANT', async () => {
+  const r = created(await call(diane, 'POST', '/users', { login: `reserve2-${RUN}`, email: applicant.email }));
+  assert.equal(r.status, 409);
+  assert.equal(r.body.code, 'EMAIL_EXISTANT');
+});
+
+await check('diane accepte la demande refusée : Utilisateur de rôle utilisateur, sans Projet, avec l’auteur et la date', async () => {
+  const withoutProjectBefore = (await usersList()).withoutProject;
+  assert.equal((await call(diane, 'POST', `/access-requests/${applicant.id}/accept`)).status, 204);
+  assert.equal(await requestOf(applicant.id), undefined);
+  const { users, withoutProject } = await usersList();
+  const user = users.find((u) => u.id === applicant.id);
+  assert.deepEqual({ ...user, acceptance: { ...user.acceptance, at: undefined } }, {
+    id: applicant.id, login: applicant.email, name: 'Nom Google', email: applicant.email, isAdmin: false,
+    acceptance: { by: 'Diane', at: undefined },
+  });
+  assert.ok(recent(user.acceptance.at));
+  assert.equal(withoutProject, withoutProjectBefore + 1);
+  assert.equal(await isAdminInKeycloak(applicant.id), false);
+  assert.equal((await query(diane, `SELECT count(*)::int AS n FROM project_member WHERE user_id = $1`, [applicant.id])).rows[0].n, 0);
+  const { body } = await requestsList();
+  assert.ok(![...body.pending, ...body.refused].some((request) => request.id === applicant.id));
+});
+await check('à sa connexion suivante, la personne acceptée entre dans l’application, sans Projet', async () => {
+  Object.assign(applicant, await login(applicant.email));
+  assert.deepEqual((await call(applicant, 'GET', '/admission')).body, { status: 'admitted' });
+  const r = await call(applicant, 'GET', '/projects');
+  assert.equal(r.status, 200);
+  assert.deepEqual(r.body, []);
+  assert.equal((await call(applicant, 'GET', '/time-entries/today')).status, 200);
+});
+await check('une demande déjà acceptée : 404 DEMANDE_ACCES_INTROUVABLE si un Administrateur décide ensuite', async () => {
+  const r = await call(diane, 'POST', `/access-requests/${applicant.id}/refuse`);
+  assert.equal(r.status, 404);
+  assert.equal(r.body.code, 'DEMANDE_ACCES_INTROUVABLE');
+});
+
+await check('diane accepte directement une demande en attente ; la personne entre à sa connexion suivante', async () => {
+  const direct = await googleAccount('direct');
+  assert.equal((await call(direct, 'GET', '/admission')).body.status, 'pending');
+  assert.equal((await call(diane, 'POST', `/access-requests/${direct.id}/accept`)).status, 204);
+  Object.assign(direct, await login(direct.email));
+  assert.equal((await call(direct, 'GET', '/projects')).status, 200);
+});
+const rejected = {};
+await check('diane supprime une demande refusée : demande et compte de connexion disparaissent', async () => {
+  Object.assign(rejected, await googleAccount('rejete'));
+  await call(rejected, 'GET', '/admission');
+  assert.equal((await call(diane, 'POST', `/access-requests/${rejected.id}/refuse`)).status, 204);
+  assert.equal((await call(diane, 'DELETE', `/access-requests/${rejected.id}`)).status, 204);
+  assert.equal(await requestOf(rejected.id), undefined);
+  assert.equal((await keycloak('GET', `/users/${rejected.id}`)).status, 404);
+  const { body } = await requestsList();
+  assert.ok(![...body.pending, ...body.refused].some((request) => request.id === rejected.id));
+});
+await check('après suppression, son jeton encore valide reçoit 401 : la personne ne devient pas Utilisateur', async () => {
+  for (const path of ['/admission', '/projects']) assert.equal((await call(rejected, 'GET', path)).status, 401, path);
+  assert.equal(await userRowOf(rejected.id), 0);
+  assert.equal(await requestOf(rejected.id), undefined);
+});
+await check('RLS : l’acceptation ne s’écrit que par l’Administrateur, à la création, puis ne change plus', async () => {
+  await assert.rejects(
+    query(applicant, `UPDATE app_user SET accepted_by_name = 'Faux' WHERE id = $1`, [applicant.id]),
+    /acceptation non modifiable/,
+  );
+  await assert.rejects(
+    query(diane, `UPDATE app_user SET accepted_at = now() - interval '1 day' WHERE id = $1`, [applicant.id]),
+    /acceptation non modifiable/,
+  );
+  const ghost = { sub: `fantome-${RUN}`, isAdmin: false };
+  await assert.rejects(
+    query(ghost, `INSERT INTO app_user (id, login, accepted_by, accepted_by_name, accepted_at) VALUES ($1, $1, $1, 'Moi', now())`, [ghost.sub]),
+    /acceptation réservée/,
+  );
+  assert.equal((await query(diane, `SELECT accepted_by FROM app_user WHERE id = $1`, [applicant.id])).rows[0].accepted_by, diane.sub);
+});
+await check('après suppression, l’Email est de nouveau libre : diane crée un Utilisateur avec cet Email', async () => {
+  const r = created(await call(diane, 'POST', '/users', { login: `libre-${RUN}`, email: rejected.email }));
+  assert.equal(r.status, 201, JSON.stringify(r.body));
+  assert.equal(r.body.email, rejected.email);
+  assert.equal(r.body.acceptance, null);
 });
 
 console.log('\nNettoyage');

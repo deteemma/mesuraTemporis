@@ -2,6 +2,7 @@
 // Le message d'erreur d'un schéma est un Code d'erreur du catalogue (ADR-0021) :
 // l'API le renvoie tel quel dans le corps `{ code, message }` du refus.
 import { z } from 'zod';
+import type { DecisionDto } from './access-requests.js';
 import type { DailySummary } from './daily-summary.js';
 import { isDay } from './day.js';
 import type { ErrorCode } from './error-codes.js';
@@ -203,6 +204,8 @@ export interface UserDto {
   name: string | null;
   email: string | null;
   isAdmin: boolean;
+  /** Acceptation de la Demande d'accès dont l'Utilisateur est né (ADR-0028), sinon `null`. */
+  acceptance: DecisionDto | null;
 }
 
 /** Écran Utilisateurs : tous les Utilisateurs par Login, et combien n'ont aucune affectation. */

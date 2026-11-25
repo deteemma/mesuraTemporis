@@ -97,6 +97,18 @@ export const de: Record<UiKey, string> = {
   ATTENTE_TITRE: 'Zugriffsanfrage erfasst',
   ATTENTE_MESSAGE: 'Ihre Zugriffsanfrage wurde erfasst. Ein Administrator muss sie genehmigen, bevor Sie die Anwendung nutzen können.',
   ATTENTE_EMAIL: 'E-Mail: {email}',
+  REFUS_TITRE: 'Zugriffsanfrage abgelehnt',
+  REFUS_MESSAGE: 'Ihre Zugriffsanfrage wurde von einem Administrator abgelehnt. Sie können die Anwendung nicht nutzen.',
+  DEMANDES_TITRE_ATTENTE: 'Offene Zugriffsanfragen',
+  DEMANDES_TITRE_REFUSEES: 'Abgelehnte Zugriffsanfragen',
+  DEMANDES_RECUE_LE: 'Anfrage vom {date}',
+  DEMANDES_REFUSEE_PAR: 'Abgelehnt von {nom} am {date}',
+  DEMANDES_AVERTISSEMENT_MICROSOFT: 'Adresse von Microsoft nicht garantiert: Prüfen Sie die Identität der Person, bevor Sie annehmen.',
+  DEMANDES_COMPTEUR_ARIA: '{nombre} offene Zugriffsanfragen',
+  BOUTON_ACCEPTER: 'Annehmen',
+  BOUTON_REFUSER: 'Ablehnen',
+  CONFIRMER_DEMANDE: 'Zugriffsanfrage von «{email}» löschen? Das Anmeldekonto wird gelöscht und die E-Mail freigegeben.',
+  UTILISATEURS_ACCEPTE_PAR: 'Zugriffsanfrage angenommen von {nom} am {date}',
 };
 
 // Codes d'erreur (ADR-0021) : l'indexation par ErrorCode garantit, à la
@@ -122,4 +134,7 @@ export const deErrors: Record<ErrorCode, string> = {
   EMAIL_INVALIDE: 'Ungültige E-Mail',
   NOM_INVALIDE: 'Ungültiger Name: höchstens 255 Zeichen, keine Sonderzeichen',
   UTILISATEUR_ACTION_SUR_SOI_INTERDITE: 'Sie können weder Ihre eigene Rolle entziehen noch Ihr eigenes Konto löschen',
+  DEMANDE_ACCES_INTROUVABLE: 'Zugriffsanfrage nicht gefunden',
+  DEMANDE_ACCES_NON_REFUSEE: 'Nur eine abgelehnte Zugriffsanfrage kann gelöscht werden',
+  DEMANDE_ACCES_DEJA_REFUSEE: 'Diese Zugriffsanfrage wurde bereits abgelehnt',
 };

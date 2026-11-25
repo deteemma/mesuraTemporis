@@ -2,7 +2,8 @@
 // l'API dans le corps `{ code, message }` d'un refus et traduits par le web.
 // Catalogue : celui de la source, moins PROJET_NON_AFFECTE (ADR-0017) et les
 // codes de l'authentification maison, plus les deux codes de compte (ADR-0018)
-// et les trois refus de format de l'Annuaire des comptes (#24).
+// les trois refus de format de l'Annuaire des comptes (#24) et les trois
+// refus de décision sur une Demande d'accès (#32).
 
 export const ERROR_CODES = [
   'ERREUR_INTERNE',
@@ -25,6 +26,9 @@ export const ERROR_CODES = [
   'IMPUTATION_FIN_AVANT_DEBUT',
   'PLAGE_DATES_REQUISE',
   'UTILISATEUR_ACTION_SUR_SOI_INTERDITE',
+  'DEMANDE_ACCES_INTROUVABLE',
+  'DEMANDE_ACCES_NON_REFUSEE',
+  'DEMANDE_ACCES_DEJA_REFUSEE',
 ] as const;
 
 export type ErrorCode = (typeof ERROR_CODES)[number];
@@ -65,6 +69,9 @@ export const ERROR_MESSAGES_FR: Record<ErrorCode, string> = {
   EMAIL_INVALIDE: 'Email invalide',
   NOM_INVALIDE: 'Nom invalide : 255 caractères au plus, sans caractères spéciaux',
   UTILISATEUR_ACTION_SUR_SOI_INTERDITE: 'Vous ne pouvez ni retirer votre propre rôle ni supprimer votre propre compte',
+  DEMANDE_ACCES_INTROUVABLE: "Demande d'accès introuvable",
+  DEMANDE_ACCES_NON_REFUSEE: "Seule une Demande d'accès refusée peut être supprimée",
+  DEMANDE_ACCES_DEJA_REFUSEE: "Cette Demande d'accès est déjà refusée",
 };
 
 /** Corps d'un refus métier, avec le message français de repli. */

@@ -96,6 +96,18 @@ export const fr = {
   ATTENTE_TITRE: "Demande d'accès enregistrée",
   ATTENTE_MESSAGE: "Votre demande d'accès est enregistrée. Elle doit être validée par un Administrateur avant que vous puissiez utiliser l'application.",
   ATTENTE_EMAIL: 'Email : {email}',
+  REFUS_TITRE: "Demande d'accès refusée",
+  REFUS_MESSAGE: "Votre demande d'accès a été refusée par un Administrateur. Vous ne pouvez pas utiliser l'application.",
+  DEMANDES_TITRE_ATTENTE: "Demandes d'accès en attente",
+  DEMANDES_TITRE_REFUSEES: "Demandes d'accès refusées",
+  DEMANDES_RECUE_LE: 'Demande du {date}',
+  DEMANDES_REFUSEE_PAR: 'Refusée par {nom} le {date}',
+  DEMANDES_AVERTISSEMENT_MICROSOFT: "Adresse non garantie par Microsoft : vérifiez l'identité de la personne avant d'accepter.",
+  DEMANDES_COMPTEUR_ARIA: "{nombre} Demandes d'accès en attente",
+  BOUTON_ACCEPTER: 'Accepter',
+  BOUTON_REFUSER: 'Refuser',
+  CONFIRMER_DEMANDE: "Supprimer la Demande d'accès de « {email} » ? Son compte de connexion sera supprimé et l'Email libéré.",
+  UTILISATEURS_ACCEPTE_PAR: "Demande d'accès acceptée par {nom} le {date}",
 };
 
 export type UiKey = keyof typeof fr;

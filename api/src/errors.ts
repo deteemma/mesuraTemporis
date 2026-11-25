@@ -30,6 +30,10 @@ export const nameInvalid = () => new BusinessError(HttpStatus.BAD_REQUEST, 'NOM_
 /** Retrait du rôle ou suppression refusés : action sur soi (ADR-0018). */
 export const accountActionRefused = (code: AccountActionRefusal) => new BusinessError(HttpStatus.FORBIDDEN, code);
 
+export const accessRequestNotFound = () => new BusinessError(HttpStatus.NOT_FOUND, 'DEMANDE_ACCES_INTROUVABLE');
+/** Décision que l'état de la Demande d'accès n'autorise pas (#32). */
+export const accessRequestDecisionRefused = (code: ErrorCode) => new BusinessError(HttpStatus.CONFLICT, code);
+
 /** Vrai si l'erreur PostgreSQL est la violation de l'index d'unicité nommé. */
 export function isUniqueViolation(error: unknown, constraint: string): boolean {
   if (typeof error !== 'object' || error === null) return false;

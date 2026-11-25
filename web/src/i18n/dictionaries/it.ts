@@ -97,6 +97,18 @@ export const it: Record<UiKey, string> = {
   ATTENTE_TITRE: 'Richiesta di accesso registrata',
   ATTENTE_MESSAGE: "La sua richiesta di accesso è stata registrata. Deve essere approvata da un amministratore prima che possa usare l'applicazione.",
   ATTENTE_EMAIL: 'Email: {email}',
+  REFUS_TITRE: 'Richiesta di accesso rifiutata',
+  REFUS_MESSAGE: "La sua richiesta di accesso è stata rifiutata da un amministratore. Non può usare l'applicazione.",
+  DEMANDES_TITRE_ATTENTE: 'Richieste di accesso in attesa',
+  DEMANDES_TITRE_REFUSEES: 'Richieste di accesso rifiutate',
+  DEMANDES_RECUE_LE: 'Richiesta del {date}',
+  DEMANDES_REFUSEE_PAR: 'Rifiutata da {nom} il {date}',
+  DEMANDES_AVERTISSEMENT_MICROSOFT: "Indirizzo non garantito da Microsoft: verifichi l'identità della persona prima di accettare.",
+  DEMANDES_COMPTEUR_ARIA: '{nombre} richieste di accesso in attesa',
+  BOUTON_ACCEPTER: 'Accetta',
+  BOUTON_REFUSER: 'Rifiuta',
+  CONFIRMER_DEMANDE: "Eliminare la richiesta di accesso di «{email}»? L'account di accesso sarà eliminato e l'email liberata.",
+  UTILISATEURS_ACCEPTE_PAR: 'Richiesta di accesso accettata da {nom} il {date}',
 };
 
 // Codes d'erreur (ADR-0021) : l'indexation par ErrorCode garantit, à la
@@ -122,4 +134,7 @@ export const itErrors: Record<ErrorCode, string> = {
   EMAIL_INVALIDE: 'Email non valida',
   NOM_INVALIDE: 'Nome non valido: al massimo 255 caratteri, senza caratteri speciali',
   UTILISATEUR_ACTION_SUR_SOI_INTERDITE: 'Non puoi rimuovere il tuo ruolo né eliminare il tuo account',
+  DEMANDE_ACCES_INTROUVABLE: 'Richiesta di accesso non trovata',
+  DEMANDE_ACCES_NON_REFUSEE: 'Solo una richiesta di accesso rifiutata può essere eliminata',
+  DEMANDE_ACCES_DEJA_REFUSEE: 'Questa richiesta di accesso è già stata rifiutata',
 };

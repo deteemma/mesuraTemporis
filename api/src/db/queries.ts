@@ -1,4 +1,5 @@
 // Fragments de requêtes partagés par les services, écrits une seule fois.
+import type { DecisionDto } from '@app/shared';
 import { type Expression, expressionBuilder, type SqlBool } from 'kysely';
 import { projectNotFound } from '../errors.js';
 import type { Tx } from './database.service.js';
@@ -41,4 +42,13 @@ export async function countTimeEntries(
     .where(column, '=', id)
     .executeTakeFirstOrThrow();
   return Number(timeEntries);
+}
+
+/**
+ * Décision d'un Administrateur sur une Demande d'accès (ADR-0028), lue dans
+ * ses colonnes « Nom au moment de la décision » et « date » ; `null` sans
+ * décision.
+ */
+export function decisionOf(name: string | null, at: Date | null): DecisionDto | null {
+  return name !== null && at !== null ? { by: name, at: at.toISOString() } : null;
 }

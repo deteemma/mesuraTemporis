@@ -97,6 +97,18 @@ export const en: Record<UiKey, string> = {
   ATTENTE_TITRE: 'Access request recorded',
   ATTENTE_MESSAGE: 'Your access request has been recorded. An administrator must approve it before you can use the application.',
   ATTENTE_EMAIL: 'Email: {email}',
+  REFUS_TITRE: 'Access request refused',
+  REFUS_MESSAGE: 'Your access request has been refused by an administrator. You cannot use the application.',
+  DEMANDES_TITRE_ATTENTE: 'Pending access requests',
+  DEMANDES_TITRE_REFUSEES: 'Refused access requests',
+  DEMANDES_RECUE_LE: 'Requested on {date}',
+  DEMANDES_REFUSEE_PAR: 'Refused by {nom} on {date}',
+  DEMANDES_AVERTISSEMENT_MICROSOFT: 'Address not guaranteed by Microsoft: verify the person’s identity before accepting.',
+  DEMANDES_COMPTEUR_ARIA: '{nombre} pending access requests',
+  BOUTON_ACCEPTER: 'Accept',
+  BOUTON_REFUSER: 'Refuse',
+  CONFIRMER_DEMANDE: 'Delete the access request of "{email}"? Their sign-in account will be deleted and the email released.',
+  UTILISATEURS_ACCEPTE_PAR: 'Access request accepted by {nom} on {date}',
 };
 
 // Codes d'erreur (ADR-0021) : l'indexation par ErrorCode garantit, à la
@@ -122,4 +134,7 @@ export const enErrors: Record<ErrorCode, string> = {
   EMAIL_INVALIDE: 'Invalid email',
   NOM_INVALIDE: 'Invalid name: at most 255 characters, no special characters',
   UTILISATEUR_ACTION_SUR_SOI_INTERDITE: 'You cannot remove your own role or delete your own account',
+  DEMANDE_ACCES_INTROUVABLE: 'Access request not found',
+  DEMANDE_ACCES_NON_REFUSEE: 'Only a refused access request can be deleted',
+  DEMANDE_ACCES_DEJA_REFUSEE: 'This access request has already been refused',
 };
