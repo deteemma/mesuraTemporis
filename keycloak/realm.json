@@ -199,7 +199,7 @@
     },
     {
       "alias": "microsoft first broker login - sans email",
-      "description": "Compte Microsoft sans email : refusé avec le message standard, sans Demande d'accès (ADR-0028). Le compte Keycloak, créé juste avant, reste sans email ni lien : il ne peut pas se connecter, et un nouvel essai est refusé de même. Condition sans valeur attendue : vraie quand l'email est absent (null)",
+      "description": "Sans email : refus, message standard (ADR-0028). Le compte créé juste avant reste sans lien ni connexion possible. Condition sans valeur attendue = email absent (null)",
       "providerId": "basic-flow",
       "topLevel": false,
       "builtIn": false,
