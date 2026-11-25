@@ -78,10 +78,10 @@ compte `admin` du socle) : realm `monappli` › *Users* › *Add user*, onglet
 *Credentials* › *Set password*, onglet *Role mapping* › *Assign role* ›
 `administrateur`.
 
-## 6. Connexion avec Google (facultatif)
+## 6. Connexion avec Google ou Microsoft (facultatif)
 
-Le fournisseur demande de créer une « application OAuth ». Adresse de retour
-à déclarer (la ligne Microsoft ne sert qu'à la section 6.2, non proposée) :
+Chaque fournisseur demande de créer une « application OAuth ». Adresse de retour
+à déclarer :
 
 | Fournisseur | Adresse de retour (*redirect URI*) |
 |---|---|
@@ -106,9 +106,6 @@ Le fournisseur demande de créer une « application OAuth ». Adresse de retour
 
 ### 6.2 Microsoft
 
-> Non proposé par cette application (ADR-0019). Le bouton « Microsoft » reste
-> absent, même si les identifiants ci-dessous sont renseignés.
-
 1. Ouvrez https://portal.azure.com et connectez-vous (un compte Microsoft gratuit suffit).
 2. Recherchez **Microsoft Entra ID** › **Inscriptions d'applications** › **Nouvelle inscription** :
    - nom : `Keycloak monappli` ;
@@ -119,13 +116,16 @@ Le fournisseur demande de créer une « application OAuth ». Adresse de retour
 5. Copiez immédiatement la colonne **Valeur** (pas « ID du secret ») : elle ne sera plus affichée.
 6. Notez la date d'expiration dans votre agenda : il faudra créer un nouveau secret avant cette date.
 
-### 6.3 Activer le bouton Google
+### 6.3 Activer les boutons
 
-Dans `/opt/applications/monappli/.env`, renseignez :
+Dans `/opt/applications/monappli/.env`, renseignez les identifiants du ou des
+fournisseurs retenus :
 
 ```
 GOOGLE_CLIENT_ID=...
 GOOGLE_CLIENT_SECRET=...
+MICROSOFT_CLIENT_ID=...
+MICROSOFT_CLIENT_SECRET=...
 ```
 
 puis réappliquez le realm :
@@ -134,15 +134,26 @@ puis réappliquez le realm :
 bash /opt/socle/scripts/appliquer-realm.sh monappli /opt/applications/monappli/.env
 ```
 
-Le bouton « Google » apparaît sur la page de connexion. Tant que l'identifiant
-reste vide, il est désactivé.
+Les boutons « Google » et « Microsoft » s'ajoutent à la page de connexion.
+Le bouton d'un fournisseur n'apparaît que si son identifiant est renseigné.
 
-À la première connexion Google, un Utilisateur est créé (rôle `utilisateur`,
-aucun Projet, Login = Email), sans page de profil. La connexion Google est
-refusée si l'email n'est pas vérifié, ou si l'Email est déjà celui (ou le Login)
-d'un Utilisateur : un compte créé par un Administrateur se connecte uniquement
-par Login et mot de passe. Ces réglages (ADR-0019, ADR-0024) sont livrés dans le
-realm : rien à configurer dans Keycloak.
+La première connexion Google ou Microsoft d'une personne inconnue crée une
+Demande d'accès en attente, sans page de profil (Login = Email). Un
+Administrateur l'accepte ou la refuse depuis l'écran Utilisateurs. Pour une
+demande Microsoft, un avertissement rappelle que l'adresse n'est pas garantie :
+vérifiez l'identité de la personne avant d'accepter.
+
+La connexion est refusée avec le message standard de Keycloak (« Nom
+d'utilisateur ou mot de passe invalide ») dans les cas suivants :
+
+- l'Email est déjà celui, ou le Login, d'un Utilisateur ;
+- l'Email est réservé par une Demande d'accès ;
+- l'email d'un compte Google n'est pas vérifié ;
+- un compte Microsoft ne transmet pas d'email.
+
+Un compte créé par un Administrateur se connecte uniquement par Login et mot de
+passe. Ces réglages (ADR-0024, ADR-0028) sont livrés dans le realm : rien à
+configurer dans Keycloak.
 
 ## Mettre à jour
 

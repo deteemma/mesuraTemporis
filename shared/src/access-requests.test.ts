@@ -6,6 +6,10 @@ test('un compte inconnu arrivé par Google crée une Demande d’accès du fourn
   assert.deepEqual(arrivalOf(['google']), { kind: 'access-request', provider: 'google' });
 });
 
+test('un compte inconnu arrivé par Microsoft crée une Demande d’accès du fournisseur « microsoft »', () => {
+  assert.deepEqual(arrivalOf(['microsoft']), { kind: 'access-request', provider: 'microsoft' });
+});
+
 test('un compte inconnu sans fournisseur d’identité (Compte initial, compte de test) devient Utilisateur', () => {
   assert.deepEqual(arrivalOf([]), { kind: 'user' });
 });

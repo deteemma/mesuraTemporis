@@ -150,6 +150,94 @@
           "userSetupAllowed": false
         }
       ]
+    },
+    {
+      "alias": "microsoft first broker login",
+      "description": "Première connexion Microsoft : crée le compte, sans page de profil ; refusée si l'Email ou le Login est déjà pris, ou si le compte ne transmet pas d'email (ADR-0024, ADR-0028)",
+      "providerId": "basic-flow",
+      "topLevel": true,
+      "builtIn": false,
+      "authenticationExecutions": [
+        {
+          "authenticator": "idp-review-profile",
+          "requirement": "DISABLED",
+          "priority": 10,
+          "autheticatorFlow": false,
+          "userSetupAllowed": false
+        },
+        {
+          "flowAlias": "microsoft first broker login - creation",
+          "requirement": "REQUIRED",
+          "priority": 20,
+          "autheticatorFlow": true,
+          "userSetupAllowed": false
+        },
+        {
+          "flowAlias": "microsoft first broker login - sans email",
+          "requirement": "CONDITIONAL",
+          "priority": 30,
+          "autheticatorFlow": true,
+          "userSetupAllowed": false
+        }
+      ]
+    },
+    {
+      "alias": "microsoft first broker login - creation",
+      "description": "Crée le compte si l'Email et le Login sont libres ; sinon la connexion est refusée (ADR-0024)",
+      "providerId": "basic-flow",
+      "topLevel": false,
+      "builtIn": false,
+      "authenticationExecutions": [
+        {
+          "authenticator": "idp-create-user-if-unique",
+          "requirement": "ALTERNATIVE",
+          "priority": 10,
+          "autheticatorFlow": false,
+          "userSetupAllowed": false
+        }
+      ]
+    },
+    {
+      "alias": "microsoft first broker login - sans email",
+      "description": "Compte Microsoft sans email : refusé avec le message standard, sans Demande d'accès (ADR-0028). Le compte Keycloak, créé juste avant, reste sans email ni lien : il ne peut pas se connecter, et un nouvel essai est refusé de même. Condition sans valeur attendue : vraie quand l'email est absent (null)",
+      "providerId": "basic-flow",
+      "topLevel": false,
+      "builtIn": false,
+      "authenticationExecutions": [
+        {
+          "authenticator": "conditional-user-attribute",
+          "authenticatorConfig": "microsoft sans email",
+          "requirement": "REQUIRED",
+          "priority": 10,
+          "autheticatorFlow": false,
+          "userSetupAllowed": false
+        },
+        {
+          "authenticator": "deny-access-authenticator",
+          "authenticatorConfig": "microsoft refus sans email",
+          "requirement": "REQUIRED",
+          "priority": 20,
+          "autheticatorFlow": false,
+          "userSetupAllowed": false
+        }
+      ]
+    }
+  ],
+  "authenticatorConfig": [
+    {
+      "alias": "microsoft sans email",
+      "config": {
+        "attribute_name": "email",
+        "regex": "false",
+        "not": "false",
+        "include_group_attributes": "false"
+      }
+    },
+    {
+      "alias": "microsoft refus sans email",
+      "config": {
+        "denyErrorMessage": "invalidUserMessage"
+      }
     }
   ],
   "identityProviders": [
@@ -173,9 +261,9 @@
       "alias": "microsoft",
       "providerId": "microsoft",
       "displayName": "Microsoft",
-      "enabled": false,
+      "enabled": "$(env:MICROSOFT_ENABLED)",
       "trustEmail": true,
-      "firstBrokerLoginFlowAlias": "first broker login",
+      "firstBrokerLoginFlowAlias": "microsoft first broker login",
       "config": {
         "clientId": "$(env:MICROSOFT_CLIENT_ID)",
         "clientSecret": "$(env:MICROSOFT_CLIENT_SECRET)",

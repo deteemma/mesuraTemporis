@@ -1737,23 +1737,29 @@ await check('un autre Administrateur y parvient : « second » est refusé sur l
   assert.equal((await keycloak('GET', `/users/${second.id}`)).status, 404);
 });
 
-console.log('\nDemande d’accès à la première connexion Google (ADR-0028)');
+console.log('\nDemande d’accès à la première connexion Google ou Microsoft (ADR-0028)');
 /**
- * Compte tel que le crée la première connexion Google dans Keycloak (lien au
- * fournisseur « google », Login = Email), avec le mot de passe Test1234! pour
- * obtenir un jeton dans ce contrôle. Ne passe pas par l'API.
+ * Compte tel que le crée la première connexion Google (ou Microsoft) dans
+ * Keycloak (lien au fournisseur, Login = Email), avec le mot de passe
+ * Test1234! pour obtenir un jeton dans ce contrôle. Ne passe pas par l'API.
  */
-async function googleAccount(prefix) {
-  const email = `${prefix}-${RUN}@gmail.test`;
-  const r = await keycloak('POST', '/users', { username: email, email, emailVerified: true, firstName: 'Nom Google', enabled: true });
+const PROVIDER_SAMPLES = {
+  google: { domain: 'gmail.test', name: 'Nom Google' },
+  microsoft: { domain: 'outlook.test', name: 'Nom Microsoft' },
+};
+async function providerAccount(provider, prefix) {
+  const { domain, name } = PROVIDER_SAMPLES[provider];
+  const email = `${prefix}-${RUN}@${domain}`;
+  const r = await keycloak('POST', '/users', { username: email, email, emailVerified: true, firstName: name, enabled: true });
   assert.equal(r.status, 201, JSON.stringify(r.body));
   const { id } = (await keycloak('GET', `/users?username=${encodeURIComponent(email)}&exact=true`)).body[0];
   createdAccounts.push(id);
-  const link = await keycloak('POST', `/users/${id}/federated-identity/google`, { identityProvider: 'google', userId: `g-${prefix}-${RUN}`, userName: email });
-  assert.equal(link.status, 204, `lien Google : ${JSON.stringify(link.body)}`);
+  const link = await keycloak('POST', `/users/${id}/federated-identity/${provider}`, { identityProvider: provider, userId: `${provider}-${prefix}-${RUN}`, userName: email });
+  assert.equal(link.status, 204, `lien ${provider} : ${JSON.stringify(link.body)}`);
   await keycloak('PUT', `/users/${id}/reset-password`, { type: 'password', value: 'Test1234!', temporary: false });
   return { ...(await login(email)), id, email };
 }
+const googleAccount = (prefix) => providerAccount('google', prefix);
 const requestOf = async (id) =>
   (await query(diane, `SELECT email, display_name, provider, status, created_at FROM access_request WHERE account_id = $1`, [id])).rows[0];
 const userRowOf = async (id) => (await query(diane, `SELECT id FROM app_user WHERE id = $1`, [id])).rowCount;
@@ -1898,6 +1904,16 @@ await check('diane voit les demandes en attente (Email, Nom, fournisseur, date) 
   const expected = await query(diane, `SELECT count(*)::int AS n FROM access_request WHERE status = 'pending'`);
   assert.equal(r.body.pending.length, expected.rows[0].n);
   assert.ok(!r.body.refused.some((request) => request.id === applicant.id));
+});
+await check('un nouveau compte Microsoft crée aussi une Demande d’accès en attente, du fournisseur « microsoft » (celui qui porte l’avertissement à l’écran)', async () => {
+  const microsoftApplicant = await providerAccount('microsoft', 'candidat-ms');
+  assert.deepEqual((await call(microsoftApplicant, 'GET', '/admission')).body, { status: 'pending', email: microsoftApplicant.email });
+  assert.equal((await call(microsoftApplicant, 'GET', '/projects')).body.code, 'ACCES_REFUSE');
+  assert.equal(await userRowOf(microsoftApplicant.id), 0);
+  const listed = (await requestsList()).body.pending.find((request) => request.id === microsoftApplicant.id);
+  assert.deepEqual({ ...listed, createdAt: undefined }, {
+    id: microsoftApplicant.id, email: microsoftApplicant.email, name: 'Nom Microsoft', provider: 'microsoft', createdAt: undefined, refusal: null,
+  });
 });
 await check('demande inconnue : 404 DEMANDE_ACCES_INTROUVABLE pour l’acceptation, le refus et la suppression', async () => {
   for (const [method, path] of [['POST', '/accept'], ['POST', '/refuse'], ['DELETE', '']]) {
