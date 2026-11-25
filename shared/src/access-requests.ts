@@ -37,7 +37,9 @@ export type AccessRequestDecision = 'accept' | 'refuse' | 'delete';
  * permise (ADR-0028, validé par la responsable fonctionnelle pour #32) :
  * - en attente : acceptée ou refusée, jamais supprimée directement ;
  * - refusée : acceptée, ou supprimée (ce qui libère l'Email) ; un second
- *   refus ne remplace pas le premier.
+ *   refus est interdit et ne remplace pas le premier (validé le 2026-11-25).
+ * Une demande refusée puis acceptée ne garde pas la trace de son refus :
+ * seule l'acceptation reste, sur l'Utilisateur (validé le 2026-11-25).
  */
 export function decisionRefusal(status: AccessRequestStatus, decision: AccessRequestDecision): ErrorCode | null {
   if (status === 'pending' && decision === 'delete') return 'DEMANDE_ACCES_NON_REFUSEE';

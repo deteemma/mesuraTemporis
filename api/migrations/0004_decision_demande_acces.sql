@@ -2,7 +2,8 @@
 --
 -- Refus : la demande reste, à l'état refusé, avec l'Administrateur qui l'a
 -- prise et sa date. Acceptation : la demande disparaît et l'Utilisateur naît,
--- portant lui-même l'auteur et la date de l'acceptation. L'auteur est gardé
+-- portant lui-même l'auteur et la date de l'acceptation ; un refus antérieur
+-- n'est pas conservé (validé par la responsable fonctionnelle). L'auteur est gardé
 -- par son Nom (à défaut son Login) au moment de la décision : il reste affiché
 -- si l'Administrateur est supprimé ensuite (validé par la responsable
 -- fonctionnelle).
