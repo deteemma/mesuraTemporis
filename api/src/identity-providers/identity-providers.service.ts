@@ -1,7 +1,7 @@
 import { setTimeout as sleep } from 'node:timers/promises';
 import { type BeforeApplicationShutdown, Injectable, Logger, type OnApplicationBootstrap } from '@nestjs/common';
 import {
-  type AdministratorSignIn,
+  type AccountSignIn,
   type DeactivationImpactDto,
   deactivationRefusal,
   decisionAuthorName,
@@ -10,6 +10,7 @@ import {
   type IdentityProviderDto,
   isIdentityProviderAlias,
   isProviderEnabled,
+  losingSignIn,
 } from '@app/shared';
 import { sql } from 'kysely';
 import { AccountDirectory } from '../accounts/account-directory.service.js';
@@ -72,24 +73,23 @@ export class IdentityProvidersService implements OnApplicationBootstrap, BeforeA
   }
 
   /**
-   * Utilisateurs nés du fournisseur, qui ne pourront plus se connecter s'il
-   * est désactivé ; les Demandes d'accès n'en font pas partie.
+   * Utilisateurs nés du fournisseur qui ne pourront plus se connecter s'il est
+   * désactivé : ceux qui ont un mot de passe n'en font pas partie, ni les
+   * Demandes d'accès.
    */
   async deactivationImpact(user: AuthenticatedUser, aliasParam: string): Promise<DeactivationImpactDto> {
     const alias = known(aliasParam);
     const linked = [...(await this.accounts.accountIdsLinkedTo(alias))];
-    const users =
-      linked.length === 0
-        ? 0
-        : await this.database.asUser(user, async (tx) => {
-            const { count } = await tx
-              .selectFrom('app_user')
-              .select((eb) => eb.fn.countAll<string>().as('count'))
-              .where('id', 'in', linked)
-              .executeTakeFirstOrThrow();
-            return Number(count);
-          });
-    return { users, includesYou: linked.includes(user.id) };
+    const { userIds, choices } = await this.database.asUser(user, async (tx) => ({
+      userIds:
+        linked.length === 0
+          ? []
+          : (await tx.selectFrom('app_user').select('id').where('id', 'in', linked).execute()).map((row) => row.id),
+      choices: await tx.selectFrom('identity_provider_setting').select(['alias', 'enabled']).execute(),
+    }));
+    const accounts = await Promise.all(userIds.map((id) => this.signInOf(id)));
+    const losing = losingSignIn(accounts, alias, this.enabledProviders(choices));
+    return { users: losing.length, includesYou: losing.some((account) => account.id === user.id) };
   }
 
   /**
@@ -155,15 +155,15 @@ export class IdentityProvidersService implements OnApplicationBootstrap, BeforeA
     );
   }
 
-  /** Ce qui permet à chaque Administrateur de se connecter : mot de passe, fournisseurs liés. */
-  private async administrators(): Promise<AdministratorSignIn[]> {
-    const ids = [...(await this.accounts.administratorIds())];
-    return Promise.all(
-      ids.map(async (id) => {
-        const [hasPassword, providers] = await Promise.all([this.accounts.hasPassword(id), this.accounts.identityProviders(id)]);
-        return { hasPassword, providers: providers ?? [] };
-      }),
-    );
+  /** Ce qui permet à chaque Administrateur de se connecter. */
+  private async administrators(): Promise<AccountSignIn[]> {
+    return Promise.all([...(await this.accounts.administratorIds())].map((id) => this.signInOf(id)));
+  }
+
+  /** Ce qui permet au compte de se connecter : mot de passe, fournisseurs liés. */
+  private async signInOf(id: string): Promise<AccountSignIn & { id: string }> {
+    const [hasPassword, providers] = await Promise.all([this.accounts.hasPassword(id), this.accounts.identityProviders(id)]);
+    return { id, hasPassword, providers: providers ?? [] };
   }
 
   private isConfigured(alias: IdentityProviderAlias): boolean {

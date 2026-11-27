@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { deactivationRefusal, isProviderEnabled } from './identity-providers.js';
+import { canSignIn, deactivationRefusal, isProviderEnabled, losingSignIn } from './identity-providers.js';
 
 test('sans choix d’un Administrateur, un fournisseur est activé si ses identifiants sont présents', () => {
   assert.equal(isProviderEnabled(true, null), true);
@@ -31,4 +31,18 @@ test('désactiver Google est refusé s’il ne laisse aucun Administrateur capab
 
 test('un Administrateur né de Microsoft ne compte pas si Microsoft est déjà désactivé', () => {
   assert.equal(deactivationRefusal([bornOfGoogle, bornOfMicrosoft], 'google', ['google']), 'AUCUN_ADMINISTRATEUR_CONNECTABLE');
+});
+
+test('un compte peut se connecter avec un mot de passe, même temporaire, ou par un fournisseur resté activé', () => {
+  assert.equal(canSignIn(withPassword, []), true);
+  assert.equal(canSignIn(bornOfGoogle, ['google']), true);
+  assert.equal(canSignIn(bornOfGoogle, ['microsoft']), false);
+});
+
+test('le nombre annoncé à la désactivation omet les Utilisateurs nés du fournisseur qui ont un mot de passe', () => {
+  const bornOfGoogleWithPassword = { hasPassword: true, providers: ['google'] };
+  assert.deepEqual(
+    losingSignIn([bornOfGoogle, bornOfGoogleWithPassword, bornOfMicrosoft], 'google', ['google', 'microsoft']),
+    [bornOfGoogle],
+  );
 });

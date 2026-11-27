@@ -2115,14 +2115,21 @@ if (!toggled) {
 } else {
   const born = {};
   const initiallyEnabled = (await providerOf(toggled)).enabled;
-  await check(`la confirmation de désactivation de ${toggled} compte ses Utilisateurs, pas ses Demandes d’accès`, async () => {
-    const before = (await call(diane, 'GET', `/identity-providers/${toggled}/impact`)).body;
+  const impactOf = async () => (await call(diane, 'GET', `/identity-providers/${toggled}/impact`)).body;
+  await check(`la confirmation de désactivation de ${toggled} compte ses Utilisateurs sans mot de passe, pas ses Demandes d’accès`, async () => {
+    const before = await impactOf();
     Object.assign(born, await providerAccount(toggled, 'ne-du-fournisseur'));
     await call(born, 'GET', '/admission');
     assert.equal((await call(diane, 'POST', `/access-requests/${born.id}/accept`)).status, 204);
+    Object.assign(born, await login(born.email));
     const waiting = await providerAccount(toggled, 'en-attente-fournisseur');
     await call(waiting, 'GET', '/admission');
-    const after = (await call(diane, 'GET', `/identity-providers/${toggled}/impact`)).body;
+    // Le compte d'essai a un mot de passe : il peut encore se connecter, il n'est pas compté.
+    assert.equal((await impactOf()).users, before.users);
+    for (const credential of (await keycloak('GET', `/users/${born.id}/credentials`)).body) {
+      if (credential.type === 'password') await keycloak('DELETE', `/users/${born.id}/credentials/${credential.id}`);
+    }
+    const after = await impactOf();
     assert.equal(after.users, before.users + 1);
     assert.equal(after.includesYou, false);
   });
@@ -2135,7 +2142,6 @@ if (!toggled) {
     assert.ok(recent(p.lastChange.at), p.lastChange.at);
   });
   await check('rien d’autre ne change : l’Utilisateur né du fournisseur reste listé, sa session en cours continue', async () => {
-    Object.assign(born, await login(born.email));
     assert.ok((await usersList()).users.some((u) => u.id === born.id));
     assert.equal((await call(born, 'GET', '/projects')).status, 200);
   });

@@ -13,12 +13,37 @@ export function isProviderEnabled(configured: boolean, choice: boolean | null): 
   return configured && (choice ?? true);
 }
 
-/** Ce qui permet à un Administrateur de se connecter. */
-export interface AdministratorSignIn {
-  /** Il a un mot de passe (Login et mot de passe, toujours proposés). */
+/** Ce qui permet à un compte (Utilisateur, Administrateur) de se connecter. */
+export interface AccountSignIn {
+  /** Il a un mot de passe, même temporaire (Login et mot de passe, toujours proposés). */
   hasPassword: boolean;
   /** Fournisseurs (alias Keycloak) liés à son compte. */
   providers: readonly string[];
+}
+
+/**
+ * Vrai si le compte peut se connecter : il a un mot de passe, même temporaire
+ * (validé par la responsable fonctionnelle le 2026-11-27), ou un fournisseur
+ * activé lié à son compte.
+ */
+export function canSignIn(account: AccountSignIn, enabledProviders: readonly IdentityProviderAlias[]): boolean {
+  const enabled: readonly string[] = enabledProviders;
+  return account.hasPassword || account.providers.some((provider) => enabled.includes(provider));
+}
+
+/**
+ * Comptes qui ne pourront plus se connecter si le fournisseur est désactivé :
+ * ceux qui le peuvent aujourd'hui et ne le pourront plus. Un Utilisateur né du
+ * fournisseur qui a un mot de passe n'en fait pas partie (validé par la
+ * responsable fonctionnelle le 2026-11-27).
+ */
+export function losingSignIn<T extends AccountSignIn>(
+  accounts: readonly T[],
+  alias: IdentityProviderAlias,
+  enabledProviders: readonly IdentityProviderAlias[],
+): T[] {
+  const remaining = enabledProviders.filter((provider) => provider !== alias);
+  return accounts.filter((account) => canSignIn(account, enabledProviders) && !canSignIn(account, remaining));
 }
 
 /**
@@ -28,15 +53,12 @@ export interface AdministratorSignIn {
  * `enabledProviders` : fournisseurs activés avant la désactivation.
  */
 export function deactivationRefusal(
-  administrators: readonly AdministratorSignIn[],
+  administrators: readonly AccountSignIn[],
   alias: IdentityProviderAlias,
   enabledProviders: readonly IdentityProviderAlias[],
 ): ErrorCode | null {
-  const remaining: readonly string[] = enabledProviders.filter((provider) => provider !== alias);
-  const someoneCanSignIn = administrators.some(
-    (admin) => admin.hasPassword || admin.providers.some((provider) => remaining.includes(provider)),
-  );
-  return someoneCanSignIn ? null : 'AUCUN_ADMINISTRATEUR_CONNECTABLE';
+  const remaining = enabledProviders.filter((provider) => provider !== alias);
+  return administrators.some((admin) => canSignIn(admin, remaining)) ? null : 'AUCUN_ADMINISTRATEUR_CONNECTABLE';
 }
 
 /** Fournisseurs de connexion proposés (alias Keycloak), dans l'ordre de l'écran. */
@@ -59,7 +81,7 @@ export interface IdentityProviderDto {
 
 /** Ce qu'annonce la confirmation d'une désactivation. */
 export interface DeactivationImpactDto {
-  /** Utilisateurs nés de ce fournisseur, qui ne pourront plus se connecter. */
+  /** Utilisateurs nés de ce fournisseur qui ne pourront plus se connecter (sans mot de passe). */
   users: number;
   /** L'Administrateur qui désactive en fait partie. */
   includesYou: boolean;
