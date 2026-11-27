@@ -109,6 +109,17 @@ export const it: Record<UiKey, string> = {
   BOUTON_REFUSER: 'Rifiuta',
   CONFIRMER_DEMANDE: "Eliminare la richiesta di accesso di «{email}»? L'account di accesso sarà eliminato e l'email liberata.",
   UTILISATEURS_ACCEPTE_PAR: 'Richiesta di accesso accettata da {nom} il {date}',
+  NAV_CONNEXIONS: 'Accessi',
+  CONNEXIONS_INTRO: 'Fornitori di accesso proposti nella pagina di accesso. L’accesso con login e password è sempre proposto.',
+  CONNEXIONS_ACTIVE: 'attivato',
+  CONNEXIONS_DESACTIVE: 'disattivato',
+  CONNEXIONS_NON_CONFIGURE: 'non configurato',
+  CONNEXIONS_MODIFIE_PAR: 'Modificato da {nom} il {date}',
+  CONNEXIONS_ARIA_INTERRUPTEUR: 'Proporre {fournisseur} nella pagina di accesso',
+  CONFIRMER_DESACTIVATION_TITRE: 'Conferma la disattivazione',
+  CONFIRMER_DESACTIVATION: 'Disattivare {fournisseur}? {nombre} utenti nati da questo fornitore non potranno più accedere.',
+  CONFIRMER_DESACTIVATION_VOUS: 'Lei ne fa parte: non potrà più accedere con {fournisseur}.',
+  BOUTON_DESACTIVER: 'Disattiva',
 };
 
 // Codes d'erreur (ADR-0021) : l'indexation par ErrorCode garantit, à la
@@ -137,4 +148,7 @@ export const itErrors: Record<ErrorCode, string> = {
   DEMANDE_ACCES_INTROUVABLE: 'Richiesta di accesso non trovata',
   DEMANDE_ACCES_NON_REFUSEE: 'Solo una richiesta di accesso rifiutata può essere eliminata',
   DEMANDE_ACCES_DEJA_REFUSEE: 'Questa richiesta di accesso è già stata rifiutata',
+  FOURNISSEUR_INTROUVABLE: 'Fornitore di accesso non trovato',
+  FOURNISSEUR_NON_CONFIGURE: 'Questo fornitore di accesso non è configurato: mancano le sue credenziali',
+  AUCUN_ADMINISTRATEUR_CONNECTABLE: 'Disattivazione rifiutata: nessun amministratore potrebbe più accedere',
 };

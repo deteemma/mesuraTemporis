@@ -1,18 +1,29 @@
 // Suppression confirmée par un dialogue chiffré (E18, variante C du ticket #8) :
 // un clic sur « Supprimer » lit d'abord l'impact auprès de l'API, puis ouvre un
 // dialogue qui annonce ce qui sera détruit, avec Annuler et Supprimer.
-// Partagé par les écrans Projets, Activités du Projet et Utilisateurs.
+// Partagé par les écrans Projets, Activités du Projet et Utilisateurs ; le
+// dialogue sert aussi à la désactivation d'un Fournisseur de connexion.
+import type { UiKey } from './i18n/dictionaries/fr';
 import { useEffect, useState } from 'react';
 import { useLanguage } from './i18n/i18n';
 import { useNotifyError } from './notifications';
 
 interface ConfirmDialogProps {
   message: string;
+  /** Titre et bouton de confirmation ; par défaut, ceux d'une suppression. */
+  title?: UiKey;
+  confirmLabel?: UiKey;
   onCancel: () => void;
   onConfirm: () => void;
 }
 
-function ConfirmDialog({ message, onCancel, onConfirm }: ConfirmDialogProps) {
+export function ConfirmDialog({
+  message,
+  title = 'CONFIRMER_TITRE',
+  confirmLabel = 'BOUTON_SUPPRIMER',
+  onCancel,
+  onConfirm,
+}: ConfirmDialogProps) {
   const { t } = useLanguage();
 
   useEffect(() => {
@@ -34,7 +45,7 @@ function ConfirmDialog({ message, onCancel, onConfirm }: ConfirmDialogProps) {
         onClick={(event) => event.stopPropagation()}
       >
         <h2 id="dialog-title" className="dialog__title">
-          {t('CONFIRMER_TITRE')}
+          {t(title)}
         </h2>
         <p id="dialog-message" className="dialog__message">
           {message}
@@ -44,7 +55,7 @@ function ConfirmDialog({ message, onCancel, onConfirm }: ConfirmDialogProps) {
             {t('BOUTON_ANNULER')}
           </button>
           <button type="button" className="btn btn-danger" onClick={onConfirm}>
-            {t('BOUTON_SUPPRIMER')}
+            {t(confirmLabel)}
           </button>
         </div>
       </div>

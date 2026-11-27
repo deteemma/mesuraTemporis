@@ -2054,6 +2054,99 @@ await check('après suppression, l’Email est de nouveau libre : diane crée un
   assert.equal(r.body.acceptance, null);
 });
 
+console.log('\nFournisseurs de connexion (ADR-0029)');
+// Configuré = identifiant présent dans .env, transmis à l'API comme à ce contrôle.
+const configured = { google: !!env.GOOGLE_CLIENT_ID, microsoft: !!env.MICROSOFT_CLIENT_ID };
+const providersList = async (user = diane) => call(user, 'GET', '/identity-providers');
+const providerOf = async (alias) => (await providersList()).body.find((p) => p.alias === alias);
+const keycloakProviderEnabled = async (alias) => (await keycloak('GET', `/identity-provider/instances/${alias}`)).body.enabled;
+await check('alice (non Administratrice) : écran et réglage refusés par l’API (403 ACCES_REFUSE)', async () => {
+  for (const [method, path] of [
+    ['GET', '/identity-providers'],
+    ['GET', '/identity-providers/google/impact'],
+    ['PUT', '/identity-providers/google/enabled'],
+    ['DELETE', '/identity-providers/google/enabled'],
+  ]) {
+    const r = await call(alice, method, path);
+    assert.equal(r.status, 403, `${method} ${path}`);
+    assert.equal(r.body.code, 'ACCES_REFUSE');
+  }
+});
+await check('RLS : alice ne lit ni n’écrit le réglage ; diane n’écrit qu’en son nom', async () => {
+  assert.equal((await query(alice, `SELECT * FROM identity_provider_setting`)).rowCount, 0);
+  await assert.rejects(
+    query(alice, `INSERT INTO identity_provider_setting (alias, enabled, updated_by, updated_by_name) VALUES ('google', false, $1, 'Alice')`, [alice.sub]),
+    /row-level security/,
+  );
+  await assert.rejects(
+    query(diane, `INSERT INTO identity_provider_setting (alias, enabled, updated_by, updated_by_name) VALUES ('google', false, $1, 'Alice')`, [alice.sub]),
+    /row-level security/,
+  );
+  assert.equal((await query(alice, `UPDATE identity_provider_setting SET enabled = NOT enabled`)).rowCount, 0);
+  assert.equal((await query(diane, `DELETE FROM identity_provider_setting`)).rowCount, 0);
+});
+await check('sans Utilisateur (démarrage de l’API), seul l’état de chaque fournisseur est lisible, sans auteur', async () => {
+  const r = await query(nobody, `SELECT * FROM identity_provider_choices()`);
+  assert.deepEqual(r.fields.map((f) => f.name), ['alias', 'enabled']);
+  assert.equal((await query(nobody, `SELECT * FROM identity_provider_setting`)).rowCount, 0);
+});
+await check('diane voit Google et Microsoft, « non configuré » sans identifiants ; un alias inconnu : FOURNISSEUR_INTROUVABLE', async () => {
+  const { status, body } = await providersList();
+  assert.equal(status, 200);
+  assert.deepEqual(body.map((p) => [p.alias, p.configured]), [['google', configured.google], ['microsoft', configured.microsoft]]);
+  for (const p of body) if (!p.configured) assert.equal(p.enabled, false, p.alias);
+  const r = await call(diane, 'PUT', '/identity-providers/github/enabled');
+  assert.equal(r.status, 404);
+  assert.equal(r.body.code, 'FOURNISSEUR_INTROUVABLE');
+});
+for (const alias of ['google', 'microsoft'].filter((a) => !configured[a])) {
+  await check(`${alias} non configuré : ni activé ni désactivé (FOURNISSEUR_NON_CONFIGURE)`, async () => {
+    for (const method of ['PUT', 'DELETE']) {
+      const r = await call(diane, method, `/identity-providers/${alias}/enabled`);
+      assert.equal(r.status, 409, method);
+      assert.equal(r.body.code, 'FOURNISSEUR_NON_CONFIGURE');
+    }
+    assert.equal(await keycloakProviderEnabled(alias), false);
+  });
+}
+const toggled = ['google', 'microsoft'].find((a) => configured[a]);
+if (!toggled) {
+  console.log('  – aucun fournisseur configuré dans .env : activation et désactivation non contrôlées');
+} else {
+  const born = {};
+  const initiallyEnabled = (await providerOf(toggled)).enabled;
+  await check(`la confirmation de désactivation de ${toggled} compte ses Utilisateurs, pas ses Demandes d’accès`, async () => {
+    const before = (await call(diane, 'GET', `/identity-providers/${toggled}/impact`)).body;
+    Object.assign(born, await providerAccount(toggled, 'ne-du-fournisseur'));
+    await call(born, 'GET', '/admission');
+    assert.equal((await call(diane, 'POST', `/access-requests/${born.id}/accept`)).status, 204);
+    const waiting = await providerAccount(toggled, 'en-attente-fournisseur');
+    await call(waiting, 'GET', '/admission');
+    const after = (await call(diane, 'GET', `/identity-providers/${toggled}/impact`)).body;
+    assert.equal(after.users, before.users + 1);
+    assert.equal(after.includesYou, false);
+  });
+  await check(`diane désactive ${toggled} : Keycloak ne le propose plus, l’écran montre l’auteur et la date`, async () => {
+    assert.equal((await call(diane, 'DELETE', `/identity-providers/${toggled}/enabled`)).status, 204);
+    assert.equal(await keycloakProviderEnabled(toggled), false);
+    const p = await providerOf(toggled);
+    assert.equal(p.enabled, false);
+    assert.equal(p.lastChange.by, 'Diane');
+    assert.ok(recent(p.lastChange.at), p.lastChange.at);
+  });
+  await check('rien d’autre ne change : l’Utilisateur né du fournisseur reste listé, sa session en cours continue', async () => {
+    Object.assign(born, await login(born.email));
+    assert.ok((await usersList()).users.some((u) => u.id === born.id));
+    assert.equal((await call(born, 'GET', '/projects')).status, 200);
+  });
+  await check(`diane réactive ${toggled} sans confirmation : Keycloak le propose de nouveau`, async () => {
+    assert.equal((await call(diane, 'PUT', `/identity-providers/${toggled}/enabled`)).status, 204);
+    assert.equal(await keycloakProviderEnabled(toggled), true);
+    assert.equal((await providerOf(toggled)).enabled, true);
+  });
+  if (!initiallyEnabled) await call(diane, 'DELETE', `/identity-providers/${toggled}/enabled`);
+}
+
 console.log('\nNettoyage');
 await check('suppression des Projets et Utilisateurs de test', async () => {
   await inDb(diane, async (q) => {

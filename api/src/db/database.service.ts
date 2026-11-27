@@ -13,6 +13,12 @@ export interface DbActor {
 }
 
 /**
+ * Transaction sans Utilisateur (démarrage de l'API) : la RLS ne lui laisse
+ * rien voir ; seules les fonctions prévues pour cela lui répondent.
+ */
+export const NO_USER: DbActor = { id: '', isAdmin: false };
+
+/**
  * Accès à la base avec le compte applicatif, soumis à la RLS (ADR-0003).
  * Toute requête métier passe par `asUser` : l'Utilisateur courant et
  * l'indicateur Administrateur sont transmis à PostgreSQL pour la durée de la

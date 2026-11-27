@@ -34,6 +34,9 @@ services:
       KEYCLOAK_ADMIN_URL: ${KEYCLOAK_ADMIN_URL:-}
       KEYCLOAK_ADMIN_CLIENT_ID: ${KEYCLOAK_ADMIN_CLIENT_ID:-}
       KEYCLOAK_ADMIN_CLIENT_SECRET: ${KEYCLOAK_ADMIN_CLIENT_SECRET:-}
+      # Présence des identifiants : Fournisseur de connexion configuré ou non (ADR-0029).
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
+      MICROSOFT_CLIENT_ID: ${MICROSOFT_CLIENT_ID:-}
       COMPOSE_PROFILES: ${COMPOSE_PROFILES:-}
       NODE_OPTIONS: --max-old-space-size=256
     depends_on:

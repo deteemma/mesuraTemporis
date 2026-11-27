@@ -9,6 +9,8 @@ import { OidcVerifier } from './auth/oidc-verifier.service.js';
 import { AppConfig } from './config/app-config.js';
 import { DatabaseService } from './db/database.service.js';
 import { HealthController } from './health/health.controller.js';
+import { IdentityProvidersController } from './identity-providers/identity-providers.controller.js';
+import { IdentityProvidersService } from './identity-providers/identity-providers.service.js';
 import { ProjectsController } from './projects/projects.controller.js';
 import { ProjectAccessGuard } from './projects/project-access.guard.js';
 import { ProjectsService } from './projects/projects.service.js';
@@ -33,6 +35,7 @@ import { UsersService } from './users/users.service.js';
     UsersController,
     AdmissionController,
     AccessRequestsController,
+    IdentityProvidersController,
   ],
   providers: [
     { provide: AppConfig, useFactory: () => new AppConfig() },
@@ -41,6 +44,7 @@ import { UsersService } from './users/users.service.js';
     OidcVerifier,
     UsersService,
     AccessRequestsService,
+    IdentityProvidersService,
     ProjectsService,
     ActivitiesService,
     TimeEntriesService,

@@ -64,9 +64,19 @@ export interface AccessRequestTable {
   decided_at: ColumnType<Date | null, Date | string | null | undefined, Date | string | null>;
 }
 
+/** Choix d'un Administrateur pour un Fournisseur de connexion (ADR-0029). */
+export interface IdentityProviderSettingTable {
+  alias: string;
+  enabled: boolean;
+  updated_by: string;
+  updated_by_name: string;
+  updated_at: Timestamp;
+}
+
 export interface Database {
   app_user: AppUserTable;
   access_request: AccessRequestTable;
+  identity_provider_setting: IdentityProviderSettingTable;
   project: ProjectTable;
   project_member: ProjectMemberTable;
   activity: ActivityTable;

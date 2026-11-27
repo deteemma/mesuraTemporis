@@ -20,6 +20,7 @@ import { type FormEvent, useCallback, useEffect, useState } from 'react';
 import { reloadAccessRequests, useAccessRequests } from '../accessRequests';
 import { request } from '../api';
 import { DeleteButton } from '../DeleteButton';
+import { PROVIDER_NAMES } from '../identityProviders';
 import { useLanguage } from '../i18n/i18n';
 import { useNotifyError } from '../notifications';
 
@@ -202,8 +203,6 @@ function decisionParams(decision: DecisionDto): Record<string, string> {
 function formatDay(instant: string): string {
   return formatDateInput(dayOf(instant));
 }
-
-const PROVIDER_NAMES: Record<string, string> = { google: 'Google', microsoft: 'Microsoft' };
 
 /**
  * Demandes d'accès en attente, puis refusées à part ; chaque section n'apparaît

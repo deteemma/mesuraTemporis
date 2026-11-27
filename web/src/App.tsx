@@ -9,6 +9,7 @@ import { useLanguage } from './i18n/i18n';
 import { useNotifyError } from './notifications';
 import { LanguageSwitcher } from './LanguageSwitcher';
 import { ACTIVITIES_PATH, ActivitiesPage } from './pages/ActivitiesPage';
+import { ConnectionsPage } from './pages/ConnectionsPage';
 import { MyProjectsPage } from './pages/MyProjectsPage';
 import { ProjectsPage } from './pages/ProjectsPage';
 import { ReportPage } from './pages/ReportPage';
@@ -48,6 +49,12 @@ const ICONS = {
       <path d="M2 20c0-3.3 3-6 7-6s7 2.7 7 6M16 8a3 3 0 1 1 0-6M22 20c0-2.8-1.9-5-4.5-5.7" />
     </>
   ),
+  connections: (
+    <>
+      <circle cx="8" cy="15" r="4" />
+      <path d="M11 12l9-9M17 6l3 3M14 9l2 2" />
+    </>
+  ),
   logout: <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9" />,
 };
 
@@ -70,6 +77,7 @@ const SCREENS: Screen[] = [
   { path: '/mes-projets', label: 'NAV_MES_PROJETS', shortLabel: 'NAV_MES_PROJETS', icon: ICONS.myProjects, adminOnly: false, page: MyProjectsPage },
   { path: '/projets', label: 'NAV_PROJETS', shortLabel: 'NAV_PROJETS', icon: ICONS.projects, adminOnly: true, page: ProjectsPage },
   { path: USERS_PATH, label: 'NAV_UTILISATEURS', shortLabel: 'NAV_UTILISATEURS', icon: ICONS.users, adminOnly: true, page: UsersPage },
+  { path: '/connexions', label: 'NAV_CONNEXIONS', shortLabel: 'NAV_CONNEXIONS', icon: ICONS.connections, adminOnly: true, page: ConnectionsPage },
 ];
 
 export function App({ user }: { user: User }) {

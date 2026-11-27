@@ -3,7 +3,8 @@
 // Catalogue : celui de la source, moins PROJET_NON_AFFECTE (ADR-0017) et les
 // codes de l'authentification maison, plus les deux codes de compte (ADR-0018)
 // les trois refus de format de l'Annuaire des comptes (#24) et les trois
-// refus de décision sur une Demande d'accès (#32).
+// refus de décision sur une Demande d'accès (#32), et les trois refus de
+// réglage d'un Fournisseur de connexion (#35).
 
 export const ERROR_CODES = [
   'ERREUR_INTERNE',
@@ -29,6 +30,9 @@ export const ERROR_CODES = [
   'DEMANDE_ACCES_INTROUVABLE',
   'DEMANDE_ACCES_NON_REFUSEE',
   'DEMANDE_ACCES_DEJA_REFUSEE',
+  'FOURNISSEUR_INTROUVABLE',
+  'FOURNISSEUR_NON_CONFIGURE',
+  'AUCUN_ADMINISTRATEUR_CONNECTABLE',
 ] as const;
 
 export type ErrorCode = (typeof ERROR_CODES)[number];
@@ -72,6 +76,9 @@ export const ERROR_MESSAGES_FR: Record<ErrorCode, string> = {
   DEMANDE_ACCES_INTROUVABLE: "Demande d'accès introuvable",
   DEMANDE_ACCES_NON_REFUSEE: "Seule une Demande d'accès refusée peut être supprimée",
   DEMANDE_ACCES_DEJA_REFUSEE: "Cette Demande d'accès est déjà refusée",
+  FOURNISSEUR_INTROUVABLE: 'Fournisseur de connexion introuvable',
+  FOURNISSEUR_NON_CONFIGURE: "Ce Fournisseur de connexion n'est pas configuré : ses identifiants manquent",
+  AUCUN_ADMINISTRATEUR_CONNECTABLE: 'Désactivation refusée : plus aucun Administrateur ne pourrait se connecter',
 };
 
 /** Corps d'un refus métier, avec le message français de repli. */

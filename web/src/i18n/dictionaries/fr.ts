@@ -108,6 +108,17 @@ export const fr = {
   BOUTON_REFUSER: 'Refuser',
   CONFIRMER_DEMANDE: "Supprimer la Demande d'accès de « {email} » ? Son compte de connexion sera supprimé et l'Email libéré.",
   UTILISATEURS_ACCEPTE_PAR: "Demande d'accès acceptée par {nom} le {date}",
+  NAV_CONNEXIONS: 'Connexions',
+  CONNEXIONS_INTRO: 'Fournisseurs de connexion proposés sur la page de connexion. La connexion par Login et mot de passe est toujours proposée.',
+  CONNEXIONS_ACTIVE: 'activé',
+  CONNEXIONS_DESACTIVE: 'désactivé',
+  CONNEXIONS_NON_CONFIGURE: 'non configuré',
+  CONNEXIONS_MODIFIE_PAR: 'Modifié par {nom} le {date}',
+  CONNEXIONS_ARIA_INTERRUPTEUR: 'Proposer {fournisseur} sur la page de connexion',
+  CONFIRMER_DESACTIVATION_TITRE: 'Confirmer la désactivation',
+  CONFIRMER_DESACTIVATION: 'Désactiver {fournisseur} ? {nombre} Utilisateurs nés de ce fournisseur ne pourront plus se connecter.',
+  CONFIRMER_DESACTIVATION_VOUS: 'Vous en faites partie : vous ne pourrez plus vous connecter par {fournisseur}.',
+  BOUTON_DESACTIVER: 'Désactiver',
 };
 
 export type UiKey = keyof typeof fr;

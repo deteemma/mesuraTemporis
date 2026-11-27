@@ -51,6 +51,50 @@ export class AccountDirectory {
     return links.map((link) => link.identityProvider);
   }
 
+  /** Vrai si le compte a un mot de passe, même temporaire ; faux s'il est absent. */
+  async hasPassword(userId: string): Promise<boolean> {
+    const response = await this.get(`${userPath(userId)}/credentials`);
+    if (response.status === 404) return false;
+    await ensureOk(response);
+    const credentials = (await response.json()) as { type: string }[];
+    return credentials.some((credential) => credential.type === 'password');
+  }
+
+  /**
+   * Identifiants des comptes liés au fournisseur d'identité : Utilisateurs nés
+   * de ce fournisseur, et aussi Demandes d'accès (ADR-0029).
+   */
+  async accountIdsLinkedTo(alias: string): Promise<Set<string>> {
+    const ids = new Set<string>();
+    for (let first = 0; ; first += PAGE_SIZE) {
+      const response = await this.get(
+        `/users?idpAlias=${encodeURIComponent(alias)}&first=${first}&max=${PAGE_SIZE}&briefRepresentation=true`,
+      );
+      await ensureOk(response);
+      const page = (await response.json()) as { id: string }[];
+      for (const account of page) ids.add(account.id);
+      if (page.length < PAGE_SIZE) return ids;
+    }
+  }
+
+  /**
+   * Active ou désactive le fournisseur dans Keycloak (rôle
+   * `manage-identity-providers`, ADR-0029). Les sessions en cours ne sont pas
+   * interrompues. Rejouable.
+   */
+  async setIdentityProviderEnabled(alias: string, enabled: boolean): Promise<void> {
+    // Représentation complète renvoyée ; le secret masqué renvoyé tel quel est conservé par Keycloak.
+    const representation = await this.identityProvider(alias);
+    if (representation.enabled === enabled) return;
+    await ensureOk(await this.send('PUT', identityProviderPath(alias), { ...representation, enabled }));
+  }
+
+  private async identityProvider(alias: string): Promise<{ enabled?: boolean } & Record<string, unknown>> {
+    const response = await this.get(identityProviderPath(alias));
+    await ensureOk(response);
+    return (await response.json()) as { enabled?: boolean } & Record<string, unknown>;
+  }
+
   /** Identifiants des comptes qui portent directement le rôle Administrateur. */
   async administratorIds(): Promise<Set<string>> {
     const ids = new Set<string>();
@@ -236,6 +280,7 @@ export interface Account {
 }
 
 const userPath = (userId: string) => `/users/${encodeURIComponent(userId)}`;
+const identityProviderPath = (alias: string) => `/identity-provider/instances/${encodeURIComponent(alias)}`;
 
 /** 409 de Keycloak à la création : « User exists with same username » ou « … same email ». */
 async function conflict(response: Response): Promise<BusinessError> {

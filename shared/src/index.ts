@@ -15,3 +15,4 @@ export * from './report.js';
 export * from './daily-summary.js';
 export * from './report-export.js';
 export * from './access-requests.js';
+export * from './identity-providers.js';

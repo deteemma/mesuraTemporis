@@ -109,6 +109,17 @@ export const de: Record<UiKey, string> = {
   BOUTON_REFUSER: 'Ablehnen',
   CONFIRMER_DEMANDE: 'Zugriffsanfrage von «{email}» löschen? Das Anmeldekonto wird gelöscht und die E-Mail freigegeben.',
   UTILISATEURS_ACCEPTE_PAR: 'Zugriffsanfrage angenommen von {nom} am {date}',
+  NAV_CONNEXIONS: 'Anmeldungen',
+  CONNEXIONS_INTRO: 'Anmeldeanbieter auf der Anmeldeseite. Die Anmeldung mit Benutzername und Passwort wird immer angeboten.',
+  CONNEXIONS_ACTIVE: 'aktiviert',
+  CONNEXIONS_DESACTIVE: 'deaktiviert',
+  CONNEXIONS_NON_CONFIGURE: 'nicht konfiguriert',
+  CONNEXIONS_MODIFIE_PAR: 'Geändert von {nom} am {date}',
+  CONNEXIONS_ARIA_INTERRUPTEUR: '{fournisseur} auf der Anmeldeseite anbieten',
+  CONFIRMER_DESACTIVATION_TITRE: 'Deaktivierung bestätigen',
+  CONFIRMER_DESACTIVATION: '{fournisseur} deaktivieren? {nombre} Benutzer, die über diesen Anbieter entstanden sind, können sich nicht mehr anmelden.',
+  CONFIRMER_DESACTIVATION_VOUS: 'Sie gehören dazu: Sie können sich nicht mehr über {fournisseur} anmelden.',
+  BOUTON_DESACTIVER: 'Deaktivieren',
 };
 
 // Codes d'erreur (ADR-0021) : l'indexation par ErrorCode garantit, à la
@@ -137,4 +148,7 @@ export const deErrors: Record<ErrorCode, string> = {
   DEMANDE_ACCES_INTROUVABLE: 'Zugriffsanfrage nicht gefunden',
   DEMANDE_ACCES_NON_REFUSEE: 'Nur eine abgelehnte Zugriffsanfrage kann gelöscht werden',
   DEMANDE_ACCES_DEJA_REFUSEE: 'Diese Zugriffsanfrage wurde bereits abgelehnt',
+  FOURNISSEUR_INTROUVABLE: 'Anmeldeanbieter nicht gefunden',
+  FOURNISSEUR_NON_CONFIGURE: 'Dieser Anmeldeanbieter ist nicht konfiguriert: seine Zugangsdaten fehlen',
+  AUCUN_ADMINISTRATEUR_CONNECTABLE: 'Deaktivierung abgelehnt: kein Administrator könnte sich mehr anmelden',
 };

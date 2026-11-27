@@ -109,6 +109,17 @@ export const en: Record<UiKey, string> = {
   BOUTON_REFUSER: 'Refuse',
   CONFIRMER_DEMANDE: 'Delete the access request of "{email}"? Their sign-in account will be deleted and the email released.',
   UTILISATEURS_ACCEPTE_PAR: 'Access request accepted by {nom} on {date}',
+  NAV_CONNEXIONS: 'Sign-in',
+  CONNEXIONS_INTRO: 'Sign-in providers offered on the sign-in page. Sign-in with login and password is always offered.',
+  CONNEXIONS_ACTIVE: 'enabled',
+  CONNEXIONS_DESACTIVE: 'disabled',
+  CONNEXIONS_NON_CONFIGURE: 'not configured',
+  CONNEXIONS_MODIFIE_PAR: 'Changed by {nom} on {date}',
+  CONNEXIONS_ARIA_INTERRUPTEUR: 'Offer {fournisseur} on the sign-in page',
+  CONFIRMER_DESACTIVATION_TITRE: 'Confirm deactivation',
+  CONFIRMER_DESACTIVATION: 'Disable {fournisseur}? {nombre} users created through this provider will no longer be able to sign in.',
+  CONFIRMER_DESACTIVATION_VOUS: 'You are one of them: you will no longer be able to sign in with {fournisseur}.',
+  BOUTON_DESACTIVER: 'Disable',
 };
 
 // Codes d'erreur (ADR-0021) : l'indexation par ErrorCode garantit, à la
@@ -137,4 +148,7 @@ export const enErrors: Record<ErrorCode, string> = {
   DEMANDE_ACCES_INTROUVABLE: 'Access request not found',
   DEMANDE_ACCES_NON_REFUSEE: 'Only a refused access request can be deleted',
   DEMANDE_ACCES_DEJA_REFUSEE: 'This access request has already been refused',
+  FOURNISSEUR_INTROUVABLE: 'Sign-in provider not found',
+  FOURNISSEUR_NON_CONFIGURE: 'This sign-in provider is not configured: its credentials are missing',
+  AUCUN_ADMINISTRATEUR_CONNECTABLE: 'Deactivation refused: no administrator would be able to sign in',
 };

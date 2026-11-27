@@ -1409,3 +1409,67 @@ select {
   color: var(--color-danger);
   font-size: var(--text-sm);
 }
+
+/* Écran Connexions (ADR-0029) : un interrupteur par Fournisseur de connexion,
+   grisé s'il n'est pas configuré. */
+
+.page__intro {
+  margin: 0 0 var(--space-4);
+  color: var(--color-text-muted);
+  font-size: var(--text-base);
+}
+
+.switch {
+  position: relative;
+  display: inline-flex;
+  cursor: pointer;
+}
+
+.switch input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  opacity: 0;
+  cursor: inherit;
+}
+
+.switch__track {
+  width: 44px;
+  height: 24px;
+  border-radius: 999px;
+  background: var(--color-border);
+  position: relative;
+  transition: background 0.15s;
+}
+
+.switch__track::after {
+  content: '';
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--color-surface);
+  transition: transform 0.15s;
+}
+
+.switch input:checked + .switch__track {
+  background: var(--color-accent);
+}
+
+.switch input:checked + .switch__track::after {
+  transform: translateX(20px);
+}
+
+.switch input:focus-visible + .switch__track {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+
+.switch:has(input:disabled) {
+  cursor: not-allowed;
+  opacity: 0.5;
+}

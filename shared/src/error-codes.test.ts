@@ -2,11 +2,12 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { ERROR_CODES, errorBody, isErrorCode } from './error-codes.js';
 
-test('le catalogue des Codes d’erreur est celui de la spécification #11, plus les refus de format du #24 et de décision du #32', () => {
+test('le catalogue des Codes d’erreur est celui de la spécification #11, plus les refus de format du #24, de décision du #32 et de Fournisseur de connexion du #35', () => {
   assert.deepEqual([...ERROR_CODES].sort(), [
     'ACCES_REFUSE',
     'ACTIVITE_INTROUVABLE',
     'ACTIVITE_NOM_DUPLIQUE',
+    'AUCUN_ADMINISTRATEUR_CONNECTABLE',
     'AUCUN_CHRONO_ACTIF',
     'DEMANDE_ACCES_DEJA_REFUSEE',
     'DEMANDE_ACCES_INTROUVABLE',
@@ -15,6 +16,8 @@ test('le catalogue des Codes d’erreur est celui de la spécification #11, plus
     'EMAIL_INVALIDE',
     'EMAIL_REQUIS',
     'ERREUR_INTERNE',
+    'FOURNISSEUR_INTROUVABLE',
+    'FOURNISSEUR_NON_CONFIGURE',
     'IMPUTATION_CHAMPS_REQUIS',
     'IMPUTATION_FIN_AVANT_DEBUT',
     'IMPUTATION_INTROUVABLE',

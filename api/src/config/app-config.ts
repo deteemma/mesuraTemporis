@@ -1,4 +1,5 @@
 // Le module ne connaît le socle que par ses variables d'environnement (ADR-0007).
+import { IDENTITY_PROVIDERS, type IdentityProviderAlias } from '@app/shared';
 import { z } from 'zod';
 
 /** Variable facultative : vide (compose transmet « » par défaut) vaut absente. */
@@ -18,6 +19,10 @@ const envSchema = z.object({
   // Compte de service de l'Annuaire des comptes (ADR-0018) et son secret, généré par le socle.
   KEYCLOAK_ADMIN_CLIENT_ID: optional(z.string()),
   KEYCLOAK_ADMIN_CLIENT_SECRET: z.string().optional(),
+  // Identifiants des Fournisseurs de connexion (ADR-0029) : seule leur présence
+  // compte, comme pour le socle qui applique le realm.
+  GOOGLE_CLIENT_ID: optional(z.string()),
+  MICROSOFT_CLIENT_ID: optional(z.string()),
   WEB_DIST_DIR: z.string().optional(),
   COMPOSE_PROFILES: z.string().default(''),
 });
@@ -40,6 +45,8 @@ export class AppConfig {
   readonly oidcAudience: string;
   /** Null tant que le secret n'est pas dans .env : l'Annuaire des comptes est indisponible. */
   readonly keycloakAdmin: KeycloakAdminConfig | null;
+  /** Fournisseurs de connexion dont les identifiants sont dans .env ; les autres sont « non configurés ». */
+  readonly configuredIdentityProviders: ReadonlySet<IdentityProviderAlias>;
   readonly webDistDir: string | undefined;
   readonly offlineMobile: boolean;
 
@@ -60,6 +67,11 @@ export class AppConfig {
           clientSecret: parsed.KEYCLOAK_ADMIN_CLIENT_SECRET,
         }
       : null;
+    const clientIds: Record<IdentityProviderAlias, string | undefined> = {
+      google: parsed.GOOGLE_CLIENT_ID,
+      microsoft: parsed.MICROSOFT_CLIENT_ID,
+    };
+    this.configuredIdentityProviders = new Set(IDENTITY_PROVIDERS.filter((alias) => clientIds[alias]));
     this.webDistDir = parsed.WEB_DIST_DIR;
     this.offlineMobile = parsed.COMPOSE_PROFILES.split(',').includes('mobile-hors-ligne');
   }

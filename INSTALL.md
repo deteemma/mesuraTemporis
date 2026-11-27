@@ -128,14 +128,22 @@ MICROSOFT_CLIENT_ID=...
 MICROSOFT_CLIENT_SECRET=...
 ```
 
-puis réappliquez le realm :
+puis réappliquez le realm et redémarrez l'API, qui lit ces identifiants à son
+démarrage :
 
 ```bash
 bash /opt/socle/scripts/appliquer-realm.sh monappli /opt/applications/monappli/.env
+cd /opt/applications/monappli && docker compose up -d api
 ```
 
 Les boutons « Google » et « Microsoft » s'ajoutent à la page de connexion.
 Le bouton d'un fournisseur n'apparaît que si son identifiant est renseigné.
+
+Un Administrateur active ou désactive ensuite chaque fournisseur depuis l'écran
+**Connexions** de l'application (ADR-0029). Un fournisseur sans identifiant y
+est affiché « non configuré ». Le choix est gardé par l'application et
+réappliqué à Keycloak à chaque démarrage de l'API : un changement fait dans la
+console Keycloak est écrasé.
 
 La première connexion Google ou Microsoft d'une personne inconnue crée une
 Demande d'accès en attente, sans page de profil (Login = Email). Un
@@ -165,4 +173,9 @@ qu'il ait été supprimé ou non.
 ```bash
 cp /opt/applications/monappli/keycloak/realm.json /opt/socle/keycloak/realms/monappli.json
 bash /opt/socle/scripts/appliquer-realm.sh monappli /opt/applications/monappli/.env
+cd /opt/applications/monappli && docker compose restart api
 ```
+
+La réapplication du realm remet Google et Microsoft dans l'état de `.env` ; le
+redémarrage de l'API y réapplique aussitôt les choix faits à l'écran
+Connexions (ADR-0029).

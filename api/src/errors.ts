@@ -34,6 +34,10 @@ export const accessRequestNotFound = () => new BusinessError(HttpStatus.NOT_FOUN
 /** Décision que l'état de la Demande d'accès n'autorise pas (#32). */
 export const accessRequestDecisionRefused = (code: ErrorCode) => new BusinessError(HttpStatus.CONFLICT, code);
 
+export const identityProviderNotFound = () => new BusinessError(HttpStatus.NOT_FOUND, 'FOURNISSEUR_INTROUVABLE');
+/** Réglage refusé d'un Fournisseur de connexion : non configuré, ou dernier accès des Administrateurs (#35). */
+export const identityProviderChangeRefused = (code: ErrorCode) => new BusinessError(HttpStatus.CONFLICT, code);
+
 /** Vrai si l'erreur PostgreSQL est la violation de l'index d'unicité nommé. */
 export function isUniqueViolation(error: unknown, constraint: string): boolean {
   if (typeof error !== 'object' || error === null) return false;
