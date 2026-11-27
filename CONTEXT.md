@@ -25,6 +25,7 @@ les identifiants de code en anglais.
 | Compte initial | `admin` | Compte Administrateur créé avec le realm, à l'installation seulement. Il n'est pas protégé : comme tout Administrateur, il peut perdre son rôle ou être supprimé, et une mise à jour ne le recrée pas (ADR-0025). | Super-admin, compte racine |
 | Login | `login` | Identifiant de connexion par mot de passe, choisi par l'Administrateur, distinct de l'Email et non modifiable. Pour un compte né de Google ou de Microsoft, c'est son Email. | Identifiant email, nom d'utilisateur |
 | Email | `email` | Adresse unique d'un Utilisateur. Une première connexion Google ou Microsoft dont l'Email est déjà pris, ou réservé par une Demande d'accès, est refusée : aucun rattachement (ADR-0024, ADR-0028). | Adresse mail, courriel |
+| Fournisseur de connexion | `identity_provider` | Google ou Microsoft, par lequel une personne se connecte sans mot de passe. Un Administrateur l'active ou le désactive ; désactivé, il disparaît de l'écran de connexion, mais ses Utilisateurs et ses Demandes d'accès restent inchangés. La connexion par Login et mot de passe n'est pas un Fournisseur de connexion : elle est toujours proposée. | Mode de connexion, type de connexion |
 | Nom | `name` | Nom affiché d'un Utilisateur, en un seul champ, facultatif. | Prénom / nom de famille |
 | Annuaire des comptes | `AccountDirectory` | Source de vérité des comptes de connexion et de leur rôle (Keycloak), interrogée par l'application. Un compte absent de l'Annuaire n'a aucun rôle. | Keycloak (dans l'interface), annuaire LDAP |
 
